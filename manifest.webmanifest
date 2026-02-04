@@ -1,20 +1,14 @@
 {
   "name": "CBAM Board View (Steel – EAF/DRI)",
   "short_name": "CBAM Board",
-  "start_url": "./",
+  "id": "/CBAM-board-view/",
+  "start_url": "/CBAM-board-view/?source=pwa",
+  "scope": "/CBAM-board-view/",
   "display": "standalone",
   "background_color": "#0b1320",
   "theme_color": "#0b1320",
   "icons": [
-    {
-      "src": "icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
   ]
 }
