@@ -1,0 +1,23 @@
+:root{
+  --bg:#0b1320;
+  --panel:#0f172a;
+  --text:#e7eefc;
+  --muted:#9fb0cc;
+  --line:#1b2a45;
+  --accent:#4ea3ff;
+  --shadow: 0 18px 50px rgba(0,0,0,.45);
+  --radius:16px;
+  --radius2:20px;
+  --font: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family:var(--font);
+  background: radial-gradient(1200px 700px at 20% 10%, #162544 0%, rgba(11,19,32,0) 60%),
+              radial-gradient(900px 600px at 80% 30%, #0f2a3a 0%, rgba(11,19,32,0) 55%),
+              var(--bg);
+  color:var(--text);
+}
