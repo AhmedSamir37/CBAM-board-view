@@ -457,3 +457,83 @@ hr{
 @media (prefers-reduced-motion: reduce){
   *{ transition:none !important; }
 }
+/* ===========================
+   V3.1 — Results polish (Ultra)
+   =========================== */
+
+/* Results section spacing */
+.panel--results .panel__body{
+  padding-top: 12px;
+}
+
+/* Make KPI cards consistent even لو الكلاس عندك مختلف */
+.panel--results .kpis > * ,
+.panel--results .kpi,
+.panel--results .card{
+  border-radius: 22px;
+}
+
+/* If cards contain free text lines (prototype style), enforce hierarchy */
+.panel--results .kpis > *{
+  padding: 14px 16px;
+  border: 1px solid rgba(120,165,255,.16);
+  background:
+    radial-gradient(820px 260px at 12% 0%, rgba(90,166,255,.10) 0%, rgba(0,0,0,0) 60%),
+    rgba(0,0,0,.16);
+  box-shadow: var(--inset);
+}
+
+/* Title line (first line) */
+.panel--results .kpis > * .kpi__title,
+.panel--results .kpis > * .title,
+.panel--results .kpis > * h4,
+.panel--results .kpis > * strong:first-child{
+  display:block;
+  font-size: 12.5px;
+  color: var(--muted);
+  letter-spacing: .2px;
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+/* Value line (make numbers look board-grade) */
+.panel--results .kpis > * .kpi__value,
+.panel--results .kpis > * .value,
+.panel--results .kpis > * .big,
+.panel--results .kpis > * .num{
+  display:block;
+  font-size: 28px;
+  font-weight: 840;
+  letter-spacing: .15px;
+  line-height: 1.06;
+  margin: 0;
+  font-variant-numeric: tabular-nums; /* aligns digits */
+}
+
+/* Unit small + aligned */
+.panel--results .kpis > * .kpi__unit,
+.panel--results .kpis > * .unit{
+  font-size: 12.5px;
+  color: var(--soft);
+  margin-left: 6px;
+  font-weight: 700;
+}
+
+/* Subtext / formula line */
+.panel--results .kpis > * .kpi__sub,
+.panel--results .kpis > * .sub,
+.panel--results .kpis > * .hint{
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--soft);
+}
+
+/* Placeholder text should look muted, not like content */
+.panel--results .kpis > * .is-empty{
+  opacity: .55;
+}
+
+/* Kill the “prototype look”: avoid multiline raw text spacing */
+.panel--results .kpis > *{
+  white-space: normal;
+}
