@@ -2,17 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#0b1320" />
-  <meta name="description" content="Decision-grade CBAM exposure tool for steel (EAF/DRI). Board KPIs • Shareable scenarios • Offline-ready." />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0B1320" />
+  <meta name="description" content="Decision-grade CBAM exposure tool for steel (EAF/DRI). Board-ready KPIs + shareable scenarios." />
 
   <link rel="manifest" href="./manifest.webmanifest?v=20260205v3" />
   <link rel="icon" href="./icons/icon-192.png" />
   <link rel="apple-touch-icon" href="./icons/icon-192.png" />
 
   <title>CBAM Board View</title>
-  <!-- Bump version when you want to force-refresh cache -->
-  <link rel="stylesheet" href="./styles.v3.css?v=20260205v31" />
+
+  <!-- V3.1 stylesheet (must match file name exactly) -->
+  <link rel="stylesheet" href="./styles.v3.css?v=20260205v3" />
 </head>
 
 <body>
@@ -21,7 +22,7 @@
     <div class="inner">
       <div class="brand">
         <div class="brand__title">CBAM Board View</div>
-        <div class="brand__sub">Steel — EAF/DRI · Board KPIs · Shareable scenarios · Offline-ready</div>
+        <div class="brand__sub">Steel – EAF/DRI · Board KPIs · Shareable scenarios · Offline-ready</div>
       </div>
 
       <div class="actions">
@@ -34,7 +35,7 @@
     </div>
   </header>
 
-  <!-- MAIN LAYOUT -->
+  <!-- MAIN -->
   <main class="layout">
     <!-- INPUTS PANEL -->
     <section class="panel panel--inputs" id="inputsPanel" aria-hidden="false">
@@ -47,38 +48,38 @@
         <div class="grid">
           <div class="field">
             <label for="totalProd">Total production (t/y)</label>
-            <input id="totalProd" type="number" inputmode="numeric" min="0" step="1000" />
+            <input id="totalProd" type="number" min="0" step="1000" placeholder="e.g., 4,500,000" />
           </div>
 
           <div class="field">
             <label for="euShare">EU share (%)</label>
-            <input id="euShare" type="number" inputmode="decimal" min="0" max="100" step="0.1" />
+            <input id="euShare" type="number" min="0" max="100" step="0.1" placeholder="e.g., 18" />
           </div>
 
           <div class="field">
             <label for="euTons">EU tons (t/y)</label>
-            <input id="euTons" type="number" inputmode="numeric" min="0" step="100" />
+            <input id="euTons" type="number" min="0" step="100" placeholder="Auto from production × EU share" />
             <div class="field__note">Auto-calculated from production × EU share (can override).</div>
           </div>
 
           <div class="field">
             <label for="intensity">Emissions intensity (tCO₂/t exported)</label>
-            <input id="intensity" type="number" inputmode="decimal" min="0" step="0.01" />
+            <input id="intensity" type="number" min="0" step="0.01" placeholder="e.g., 2.10" />
           </div>
 
           <div class="field">
             <label for="cp">Carbon price (€/tCO₂)</label>
-            <input id="cp" type="number" inputmode="decimal" min="0" step="1" />
+            <input id="cp" type="number" min="0" step="1" placeholder="e.g., 80" />
           </div>
 
           <div class="field">
             <label for="exempt">Exemptions / free allocation (%)</label>
-            <input id="exempt" type="number" inputmode="decimal" min="0" max="100" step="0.1" />
+            <input id="exempt" type="number" min="0" max="100" step="0.1" placeholder="e.g., 0" />
           </div>
 
           <div class="field">
             <label for="eurusd">FX: EUR/USD (optional)</label>
-            <input id="eurusd" type="number" inputmode="decimal" min="0" step="0.0001" />
+            <input id="eurusd" type="number" min="0" step="0.0001" placeholder="e.g., 1.10" />
             <div class="field__note">Optional (only used in CSV display). Core KPIs remain in EUR.</div>
           </div>
 
@@ -104,42 +105,34 @@
       </div>
 
       <div class="panel__body">
-        <!-- KPI CARDS -->
+        <!-- KPI GRID (2×2) -->
         <div class="kpis">
-          <div class="card kpi">
-            <div class="kpi__title">Annual CBAM exposure (EU exports)</div>
-            <div class="kpi__row">
-              <span class="kpi__value is-empty" id="kpiAnnual">—</span>
-              <span class="kpi__unit">€/year</span>
-            </div>
-            <div class="kpi__sub" id="kpiAnnualSub">Enter inputs then Apply</div>
+          <div class="kpi-card">
+            <div class="kpi__label">Annual CBAM exposure (EU exports)</div>
+            <div class="kpi__value"><span id="kpiAnnual">—</span></div>
+            <div class="kpi__unit">€/year</div>
+            <div class="kpi__meta" id="kpiAnnualMeta">Enter inputs then Apply</div>
           </div>
 
-          <div class="card kpi">
-            <div class="kpi__title">CBAM cost per ton exported</div>
-            <div class="kpi__row">
-              <span class="kpi__value is-empty" id="kpiPerTon">—</span>
-              <span class="kpi__unit">€/t</span>
-            </div>
-            <div class="kpi__sub" id="kpiPerTonSub">—</div>
+          <div class="kpi-card">
+            <div class="kpi__label">CBAM cost per ton exported</div>
+            <div class="kpi__value"><span id="kpiPerTon">—</span></div>
+            <div class="kpi__unit">€/t</div>
+            <div class="kpi__meta" id="kpiPerTonMeta">—</div>
           </div>
 
-          <div class="card kpi">
-            <div class="kpi__title">Covered emissions (EU exports)</div>
-            <div class="kpi__row">
-              <span class="kpi__value is-empty" id="kpiEmissions">—</span>
-              <span class="kpi__unit">tCO₂</span>
-            </div>
-            <div class="kpi__sub" id="kpiEmissionsSub">—</div>
+          <div class="kpi-card">
+            <div class="kpi__label">Covered emissions (EU exports)</div>
+            <div class="kpi__value"><span id="kpiCovered">—</span></div>
+            <div class="kpi__unit">tCO₂</div>
+            <div class="kpi__meta" id="kpiCoveredMeta">EU tons × intensity</div>
           </div>
 
-          <div class="card kpi">
-            <div class="kpi__title">Net exposure after exemptions</div>
-            <div class="kpi__row">
-              <span class="kpi__value is-empty" id="kpiNet">—</span>
-              <span class="kpi__unit">€/year</span>
-            </div>
-            <div class="kpi__sub" id="kpiNetSub">—</div>
+          <div class="kpi-card">
+            <div class="kpi__label">Net exposure after exemptions</div>
+            <div class="kpi__value"><span id="kpiNet">—</span></div>
+            <div class="kpi__unit">€/year</div>
+            <div class="kpi__meta" id="kpiNetMeta">Gross × (1 − exemptions)</div>
           </div>
         </div>
 
@@ -151,44 +144,38 @@
         <div class="scenarios">
           <div class="scenarios__head">
             <div class="scenarios__title">Scenarios</div>
-            <div class="tabs" role="tablist" aria-label="Scenario tabs">
-              <button class="tab is-active" id="tabBase" type="button" data-scenario="base" role="tab" aria-selected="true">Base</button>
-              <button class="tab" id="tabConservative" type="button" data-scenario="conservative" role="tab" aria-selected="false">Conservative</button>
-              <button class="tab" id="tabStress" type="button" data-scenario="stress" role="tab" aria-selected="false">Stress</button>
+
+            <!-- Segmented tabs (no default white buttons) -->
+            <div class="seg" role="tablist" aria-label="Scenarios">
+              <button class="seg__btn is-active" id="btnBase" type="button" role="tab" aria-selected="true">Base</button>
+              <button class="seg__btn" id="btnCons" type="button" role="tab" aria-selected="false">Conservative</button>
+              <button class="seg__btn" id="btnStress" type="button" role="tab" aria-selected="false">Stress</button>
             </div>
           </div>
 
-          <div class="grid grid--2">
-            <div class="card kpi kpi--small">
-              <div class="kpi__title">Carbon price</div>
-              <div class="kpi__row">
-                <span class="kpi__value is-empty" id="scPrice">—</span>
-                <span class="kpi__unit">€/tCO₂</span>
-              </div>
+          <div class="kpis kpis--mini">
+            <div class="kpi-card kpi-card--mini">
+              <div class="kpi__label">Carbon price</div>
+              <div class="kpi__value"><span id="scPrice">—</span></div>
+              <div class="kpi__unit">€/tCO₂</div>
             </div>
 
-            <div class="card kpi kpi--small">
-              <div class="kpi__title">Intensity</div>
-              <div class="kpi__row">
-                <span class="kpi__value is-empty" id="scIntensity">—</span>
-                <span class="kpi__unit">tCO₂/t</span>
-              </div>
+            <div class="kpi-card kpi-card--mini">
+              <div class="kpi__label">Intensity</div>
+              <div class="kpi__value"><span id="scIntensity">—</span></div>
+              <div class="kpi__unit">tCO₂/t</div>
             </div>
 
-            <div class="card kpi kpi--small">
-              <div class="kpi__title">Annual exposure</div>
-              <div class="kpi__row">
-                <span class="kpi__value is-empty" id="scAnnual">—</span>
-                <span class="kpi__unit">€/year</span>
-              </div>
+            <div class="kpi-card kpi-card--mini">
+              <div class="kpi__label">Annual exposure</div>
+              <div class="kpi__value"><span id="scAnnual">—</span></div>
+              <div class="kpi__unit">€/year</div>
             </div>
 
-            <div class="card kpi kpi--small">
-              <div class="kpi__title">€/t exported</div>
-              <div class="kpi__row">
-                <span class="kpi__value is-empty" id="scPerTon">—</span>
-                <span class="kpi__unit">€/t</span>
-              </div>
+            <div class="kpi-card kpi-card--mini">
+              <div class="kpi__label">€/t exported</div>
+              <div class="kpi__value"><span id="scPerTon">—</span></div>
+              <div class="kpi__unit">€/t</div>
             </div>
           </div>
         </div>
@@ -196,14 +183,7 @@
     </section>
   </main>
 
-  <!-- FOOTER -->
-  <footer class="footer">
-    <div class="footer__inner">
-      <div class="muted" id="buildTag">v20260205v3 · Offline-ready · Shareable URL state</div>
-    </div>
-  </footer>
-
-  <script src="./script.js?v=20260205v3" defer></script>
+  <!-- Script -->
+  <script src="./script.js?v=20260205v3"></script>
 </body>
 </html>
-```0
