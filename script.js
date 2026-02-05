@@ -1,491 +1,497 @@
-/* CBAM Board View — script.js (v20260205v3)
-   Logic:
-   - Inputs -> KPIs:
-     EU tons = totalProd * euShare/100 (unless overridden by euTons field)
-     coveredEmissions = euTons * intensity
-     grossExposureEUR = coveredEmissions * carbonPrice
-     netExposureEUR = grossExposureEUR * (1 - exemptions/100)
-     perTonEUR = netExposureEUR / euTons
-   - Scenarios (base / conservative / stress) are simple multipliers.
-   - URL state: writes/reads query params for shareability.
+/* CBAM Board View — script.js (v3, clean)
+   - Robust bindings (works even if some button ids differ)
+   - Apply/Reset + auto-calc EU tons
+   - KPI updates + scenarios (Base/Conservative/Stress)
+   - Shareable URL state + Copy link
+   - CSV export + Print
+   - PWA install prompt (optional)
 */
 
 (() => {
-  // ---------- helpers ----------
+  "use strict";
+
+  // ---------- Helpers ----------
   const $ = (id) => document.getElementById(id);
 
-  const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
+  function num(v, fallback = 0) {
+    if (v === null || v === undefined) return fallback;
+    const s = String(v).trim();
+    if (!s) return fallback;
+    const x = Number(s);
+    return Number.isFinite(x) ? x : fallback;
+    // NOTE: we avoid locale parsing. Inputs should be dot-decimal.
+  }
 
-  const num = (v) => {
-    const x = Number(v);
-    return Number.isFinite(x) ? x : NaN;
-  };
+  function clamp(x, min, max) {
+    return Math.max(min, Math.min(max, x));
+  }
 
-  const parseField = (el, fallback = NaN) => {
-    if (!el) return fallback;
-    const v = num((el.value ?? "").toString().trim());
-    return Number.isFinite(v) ? v : fallback;
-  };
+  function fmtInt(x) {
+    const n = Math.round(num(x, 0));
+    return n.toLocaleString("en-US");
+  }
 
-  const fmtInt = (v) => {
-    if (!Number.isFinite(v)) return "—";
-    return Math.round(v).toLocaleString("en-US");
-  };
+  function fmt2(x) {
+    const n = num(x, 0);
+    return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
 
-  const fmt2 = (v) => {
-    if (!Number.isFinite(v)) return "—";
-    return (Math.round(v * 100) / 100).toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+  function fmt0(x) {
+    const n = num(x, 0);
+    return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  }
+
+  function setText(el, value) {
+    if (!el) return;
+    el.textContent = value;
+  }
+
+  function safeQS(sel, root = document) {
+    try { return root.querySelector(sel); } catch { return null; }
+  }
+
+  function safeQSA(sel, root = document) {
+    try { return Array.from(root.querySelectorAll(sel)); } catch { return []; }
+  }
+
+  // Find a button in a panel by its visible text (fallback if no id)
+  function findButtonByText(text) {
+    const btns = safeQSA("button");
+    const t = text.toLowerCase();
+    return btns.find(b => (b.textContent || "").trim().toLowerCase() === t) || null;
+  }
+
+  // ---------- Elements (inputs) ----------
+  const elTotalProd = $("totalProd");
+  const elEuShare   = $("euShare");
+  const elEuTons    = $("euTons");
+  const elIntensity = $("intensity");
+  const elCp        = $("cp");
+  const elExempt    = $("exempt");
+  const elEurusd    = $("eurusd");
+  const elRoute     = $("route");
+
+  // Panels / controls
+  const inputsPanel = $("inputsPanel");
+  const btnToggleInputs = $("btnToggleInputs") || findButtonByText("Edit inputs");
+  const btnCopyLink = $("btnCopyLink") || findButtonByText("Copy share link");
+  const btnCsv      = $("btnCsv") || findButtonByText("Download CSV");
+  const btnPrint    = $("btnPrint") || findButtonByText("Print / Save PDF");
+  const btnInstall  = $("btnInstall") || findButtonByText("Install");
+
+  // Apply/Reset (try ids first, otherwise match by text)
+  const btnApply = $("btnApply") || findButtonByText("Apply");
+  const btnReset = $("btnReset") || findButtonByText("Reset");
+
+  // ---------- KPI output elements ----------
+  const outAnnual     = $("kpiAnnual");
+  const outAnnualSub  = $("kpiAnnualSub");
+  const outPerTon     = $("kpiPerTon");
+  const outPerTonSub  = $("kpiPerTonSub");
+  const outEmissions  = $("kpiEmissions");
+  const outEmissSub   = $("kpiEmissionsSub");
+  const outNet        = $("kpiNet");
+  const outNetSub     = $("kpiNetSub");
+
+  // Scenario output tiles/cards
+  const outScnCp     = $("scnCp");
+  const outScnInt    = $("scnInt");
+  const outScnAnnual = $("scnAnnual");
+  const outScnPerTon = $("scnPerTon");
+
+  // Scenario buttons (segmented)
+  const scnBtns = safeQSA('[data-scn]'); // expects data-scn="base|conservative|stress"
+
+  // ---------- State ----------
+  let euTonsManual = false;
+  let activeScenario = "base";
+
+  // Base calculations bundle
+  function computeBase() {
+    const totalProd = clamp(num(elTotalProd?.value, 0), 0, 1e12);
+    const euShare   = clamp(num(elEuShare?.value, 0),   0, 100);
+    const intensity = clamp(num(elIntensity?.value, 0), 0, 1e6);
+    const cp        = clamp(num(elCp?.value, 0),        0, 1e6);
+    const exempt    = clamp(num(elExempt?.value, 0),    0, 100);
+
+    // EU tons: either manual or auto
+    let euTonsVal = num(elEuTons?.value, 0);
+    const euTonsAuto = totalProd * (euShare / 100);
+
+    if (!euTonsManual) {
+      euTonsVal = euTonsAuto;
+      if (elEuTons) elEuTons.value = euTonsVal ? fmt0(euTonsVal).replace(/,/g, "") : "";
+    }
+
+    const emissions = euTonsVal * intensity;            // tCO2
+    const gross     = emissions * cp;                   // €
+    const net       = gross * (1 - exempt / 100);       // €
+    const perTon    = euTonsVal > 0 ? (net / euTonsVal) : 0;
+
+    const route     = (elRoute?.value || "").trim();
+    const eurusd    = num(elEurusd?.value, 0);
+
+    return {
+      totalProd, euShare, euTons: euTonsVal, euTonsAuto,
+      intensity, cp, exempt,
+      emissions, gross, net, perTon,
+      route, eurusd
+    };
+  }
+
+  function scenarioFromBase(base, which) {
+    // Working model (not “regulation-accurate”): scenario stress-testing multipliers.
+    // Conservative: lower ETS + improved intensity
+    // Stress: higher ETS + worse intensity
+    const m = {
+      base:         { cp: 1.00, intensity: 1.00, annual: 1.00 },
+      conservative: { cp: 0.85, intensity: 0.92, annual: 0.78 },
+      stress:       { cp: 1.25, intensity: 1.10, annual: 1.45 },
+    }[which] || { cp: 1, intensity: 1, annual: 1 };
+
+    const scnCp = base.cp * m.cp;
+    const scnInt = base.intensity * m.intensity;
+
+    // recompute emissions + € using same EU tons and exemptions
+    const emissions = base.euTons * scnInt;
+    const gross = emissions * scnCp;
+    const net = gross * (1 - base.exempt / 100);
+
+    // for “annual exposure” scenario tile, apply annual multiplier as extra stress-testing knob
+    const annual = net * m.annual;
+    const perTon = base.euTons > 0 ? (annual / base.euTons) : 0;
+
+    return { scnCp, scnInt, annual, perTon };
+  }
+
+  // ---------- Rendering ----------
+  function renderKPIs(base) {
+    const hasInputs = base.euTons > 0 && base.intensity > 0 && base.cp > 0;
+
+    if (!hasInputs) {
+      setText(outAnnual, "—");
+      setText(outPerTon, "—");
+      setText(outEmissions, "—");
+      setText(outNet, "—");
+      setText(outAnnualSub, "Enter inputs then Apply");
+      setText(outPerTonSub, "—");
+      setText(outEmissSub, "—");
+      setText(outNetSub, "—");
+      return;
+    }
+
+    setText(outAnnual, fmt0(base.gross));
+    setText(outPerTon, fmt2(base.perTon));
+    setText(outEmissions, fmt0(base.emissions));
+    setText(outNet, fmt0(base.net));
+
+    setText(outAnnualSub, `EU tons: ${fmt0(base.euTons)} t/y · Exemptions: ${fmt2(base.exempt)}%`);
+    setText(outPerTonSub, "Net ÷ EU tons");
+    setText(outEmissSub, "EU tons × intensity");
+    setText(outNetSub, "Gross × (1 − exemptions)");
+  }
+
+  function renderScenarioTiles(base) {
+    const s = scenarioFromBase(base, activeScenario);
+    setText(outScnCp, fmt2(s.scnCp));
+    setText(outScnInt, fmt2(s.scnInt));
+    setText(outScnAnnual, fmt0(s.annual));
+    setText(outScnPerTon, fmt2(s.perTon));
+  }
+
+  function setActiveScenario(which) {
+    activeScenario = which || "base";
+    scnBtns.forEach(btn => {
+      const b = btn;
+      const isActive = (b.getAttribute("data-scn") === activeScenario);
+      b.classList.toggle("is-active", isActive);
+      b.setAttribute("aria-pressed", isActive ? "true" : "false");
     });
-  };
+  }
 
-  const setText = (el, text) => {
-    if (el) el.textContent = text;
-  };
-
-  const setReady = (msg = "Ready.") => setText($("statusText"), msg);
-
-  // ---------- DOM ----------
-  const els = {
-    totalProd: $("totalProd"),
-    euShare: $("euShare"),
-    euTons: $("euTons"),
-    intensity: $("intensity"),
-    cp: $("cp"),
-    exempt: $("exempt"),
-    eurusd: $("eurusd"),
-    route: $("route"),
-
-    applyBtn: $("applyBtn"),
-    resetBtn: $("resetBtn"),
-
-    // top buttons
-    btnToggleInputs: $("btnToggleInputs"),
-    btnCopyLink: $("btnCopyLink"),
-    btnCsv: $("btnCsv"),
-    btnPrint: $("btnPrint"),
-
-    // panels
-    inputsPanel: $("inputsPanel"),
-
-    // KPIs
-    kpiAnnual: $("kpiAnnual"),
-    kpiAnnualSub: $("kpiAnnualSub"),
-    kpiPerTon: $("kpiPerTon"),
-    kpiPerTonSub: $("kpiPerTonSub"),
-    kpiEmissions: $("kpiEmissions"),
-    kpiEmissionsSub: $("kpiEmissionsSub"),
-    kpiNet: $("kpiNet"),
-    kpiNetSub: $("kpiNetSub"),
-
-    // Scenario chips + values
-    scnButtons: Array.from(document.querySelectorAll(".seg__btn")),
-    scnCp: $("scnCp"),
-    scnInt: $("scnInt"),
-    scnAnnual: $("scnAnnual"),
-    scnPerTon: $("scnPerTon"),
-  };
-
-  // ---------- scenario model ----------
-  // Simple stress-testing multipliers (you can tune later).
-  const SCENARIOS = {
-    base: { cp: 1.0, intensity: 1.0 },
-    conservative: { cp: 0.85, intensity: 0.92 },
-    stress: { cp: 1.25, intensity: 1.10 },
-  };
-
-  let currentScenario = "base";
-  let lastComputed = null;
-
-  // ---------- core compute ----------
-  function computeFromInputs() {
-    const totalProd = Math.max(0, parseField(els.totalProd, 0));
-    const euShare = clamp(parseField(els.euShare, 0), 0, 100);
-    const intensity = Math.max(0, parseField(els.intensity, NaN));
-    const cp = Math.max(0, parseField(els.cp, NaN));
-    const exempt = clamp(parseField(els.exempt, 0), 0, 100);
-    const eurusd = parseField(els.eurusd, NaN); // optional, not used in math
-    const route = (els.route?.value ?? "").toString().trim();
-
-    // EU tons: auto unless user overrides with a valid number
-    const autoEuTons = totalProd * (euShare / 100);
-    const userEuTons = parseField(els.euTons, NaN);
-    const euTons = Number.isFinite(userEuTons) && userEuTons >= 0 ? userEuTons : autoEuTons;
-
-    // Validate required fields for calc
-    const ok = euTons > 0 && Number.isFinite(intensity) && Number.isFinite(cp);
-
-    if (!ok) {
-      return {
-        ok: false,
-        totalProd,
-        euShare,
-        euTons,
-        intensity,
-        cp,
-        exempt,
-        eurusd,
-        route,
-      };
-    }
-
-    const coveredEmissions = euTons * intensity; // tCO2
-    const grossExposure = coveredEmissions * cp; // EUR
-    const netExposure = grossExposure * (1 - exempt / 100); // EUR
-    const perTon = netExposure / euTons; // EUR/t
-
+  // ---------- URL state (share link) ----------
+  function buildState(base) {
     return {
-      ok: true,
-      totalProd,
-      euShare,
-      euTons,
-      intensity,
-      cp,
-      exempt,
-      eurusd,
-      route,
-
-      coveredEmissions,
-      grossExposure,
-      netExposure,
-      perTon,
+      tp: base.totalProd,
+      eu: base.euShare,
+      eut: base.euTons,
+      man: euTonsManual ? 1 : 0,
+      i: base.intensity,
+      cp: base.cp,
+      ex: base.exempt,
+      fx: base.eurusd || "",
+      r: base.route || "",
+      scn: activeScenario || "base"
     };
   }
 
-  function renderKPIs(res) {
-    if (!res.ok) {
-      setText(els.kpiAnnual, "—");
-      setText(els.kpiPerTon, "—");
-      setText(els.kpiEmissions, "—");
-      setText(els.kpiNet, "—");
+  function applyStateToInputs(st) {
+    if (!st) return;
 
-      setText(els.kpiAnnualSub, "Enter inputs then Apply");
-      setText(els.kpiPerTonSub, "—");
-      setText(els.kpiEmissionsSub, "—");
-      setText(els.kpiNetSub, "—");
-      return;
-    }
+    if (elTotalProd && st.tp !== undefined) elTotalProd.value = String(st.tp);
+    if (elEuShare   && st.eu !== undefined) elEuShare.value   = String(st.eu);
 
-    setText(els.kpiAnnual, fmtInt(res.grossExposure));
-    setText(els.kpiNet, fmtInt(res.netExposure));
-    setText(els.kpiPerTon, fmt2(res.perTon));
-    setText(els.kpiEmissions, fmtInt(res.coveredEmissions));
+    euTonsManual = String(st.man || "0") === "1";
+    if (elEuTons && st.eut !== undefined) elEuTons.value = String(st.eut);
 
-    // Subs
-    setText(
-      els.kpiAnnualSub,
-      `EU tons: ${fmtInt(res.euTons)} t/y · Exemptions: ${fmt2(res.exempt)}%`
-    );
-    setText(els.kpiEmissionsSub, "EU tons × intensity");
-    setText(els.kpiNetSub, "Gross × (1 − exemptions)");
-    setText(els.kpiPerTonSub, "Net ÷ EU tons");
+    if (elIntensity && st.i  !== undefined)  elIntensity.value = String(st.i);
+    if (elCp        && st.cp !== undefined)  elCp.value        = String(st.cp);
+    if (elExempt    && st.ex !== undefined)  elExempt.value    = String(st.ex);
+
+    if (elEurusd && st.fx !== undefined) elEurusd.value = String(st.fx);
+    if (elRoute  && st.r  !== undefined) elRoute.value  = String(st.r);
+
+    setActiveScenario(st.scn || "base");
   }
 
-  function applyScenario(res, scnKey) {
-    const scn = SCENARIOS[scnKey] ?? SCENARIOS.base;
-
-    if (!res.ok) {
-      return { ok: false };
-    }
-
-    const scnCp = res.cp * scn.cp;
-    const scnInt = res.intensity * scn.intensity;
-
-    const coveredEmissions = res.euTons * scnInt;
-    const grossExposure = coveredEmissions * scnCp;
-    const netExposure = grossExposure * (1 - res.exempt / 100);
-    const perTon = netExposure / res.euTons;
-
-    return {
-      ok: true,
-      scnCp,
-      scnInt,
-      grossExposure,
-      netExposure,
-      perTon,
-    };
-  }
-
-  function renderScenario(res, scnKey) {
-    const out = applyScenario(res, scnKey);
-    if (!out.ok) {
-      setText(els.scnCp, "—");
-      setText(els.scnInt, "—");
-      setText(els.scnAnnual, "—");
-      setText(els.scnPerTon, "—");
-      return;
-    }
-
-    setText(els.scnCp, fmt2(out.scnCp));
-    setText(els.scnInt, fmt2(out.scnInt));
-    setText(els.scnAnnual, fmtInt(out.netExposure)); // show net for scenario
-    setText(els.scnPerTon, fmt2(out.perTon));
-  }
-
-  // ---------- URL state ----------
-  function writeUrlState(res) {
-    // Keep minimal but useful state
+  function stateToQuery(st) {
     const p = new URLSearchParams();
-
-    if (Number.isFinite(res.totalProd)) p.set("p", String(Math.round(res.totalProd)));
-    if (Number.isFinite(res.euShare)) p.set("s", String(res.euShare));
-    if (Number.isFinite(res.euTons)) p.set("e", String(Math.round(res.euTons)));
-    if (Number.isFinite(res.intensity)) p.set("i", String(res.intensity));
-    if (Number.isFinite(res.cp)) p.set("c", String(Math.round(res.cp)));
-    if (Number.isFinite(res.exempt)) p.set("x", String(res.exempt));
-    if (Number.isFinite(res.eurusd)) p.set("fx", String(res.eurusd));
-    if (res.route) p.set("r", res.route);
-    p.set("scn", currentScenario);
-
-    const newUrl = `${location.pathname}?${p.toString()}`;
-    history.replaceState(null, "", newUrl);
+    Object.entries(st).forEach(([k, v]) => {
+      if (v === "" || v === null || v === undefined) return;
+      p.set(k, String(v));
+    });
+    return p.toString();
   }
 
-  function readUrlState() {
-    const p = new URLSearchParams(location.search);
+  function queryToState() {
+    const p = new URLSearchParams(window.location.search);
+    if (![...p.keys()].length) return null;
 
-    const setIf = (el, v) => {
-      if (!el) return;
-      if (v !== null && v !== undefined && v !== "") el.value = v;
+    const st = {
+      tp: p.get("tp"),
+      eu: p.get("eu"),
+      eut: p.get("eut"),
+      man: p.get("man"),
+      i: p.get("i"),
+      cp: p.get("cp"),
+      ex: p.get("ex"),
+      fx: p.get("fx"),
+      r: p.get("r"),
+      scn: p.get("scn"),
     };
 
-    setIf(els.totalProd, p.get("p"));
-    setIf(els.euShare, p.get("s"));
-    setIf(els.euTons, p.get("e"));
-    setIf(els.intensity, p.get("i"));
-    setIf(els.cp, p.get("c"));
-    setIf(els.exempt, p.get("x"));
-    setIf(els.eurusd, p.get("fx"));
-    setIf(els.route, p.get("r"));
-
-    const scn = p.get("scn");
-    if (scn && SCENARIOS[scn]) currentScenario = scn;
-  }
-
-  // ---------- actions ----------
-  function syncAutoEuTonsIfNeeded() {
-    // Only auto-fill euTons if field is empty OR equals old auto roughly.
-    const totalProd = Math.max(0, parseField(els.totalProd, 0));
-    const euShare = clamp(parseField(els.euShare, 0), 0, 100);
-    const autoEuTons = totalProd * (euShare / 100);
-
-    const raw = (els.euTons?.value ?? "").toString().trim();
-    const v = num(raw);
-
-    // If empty -> fill
-    if (!raw) {
-      if (els.euTons) els.euTons.value = autoEuTons ? String(Math.round(autoEuTons)) : "";
-      return;
-    }
-
-    // If user wrote something, do not override.
-    if (Number.isFinite(v)) return;
-  }
-
-  function onApply() {
-    // ensure euTons auto-fills if empty
-    syncAutoEuTonsIfNeeded();
-
-    const res = computeFromInputs();
-    lastComputed = res;
-
-    renderKPIs(res);
-    renderScenario(res, currentScenario);
-
-    if (res.ok) {
-      writeUrlState(res);
-      setReady("Updated.");
-    } else {
-      setReady("Missing required inputs (EU tons, intensity, carbon price).");
-    }
-  }
-
-  function onReset() {
-    if (els.totalProd) els.totalProd.value = "";
-    if (els.euShare) els.euShare.value = "";
-    if (els.euTons) els.euTons.value = "";
-    if (els.intensity) els.intensity.value = "";
-    if (els.cp) els.cp.value = "";
-    if (els.exempt) els.exempt.value = "";
-    if (els.eurusd) els.eurusd.value = "";
-    if (els.route) els.route.value = "";
-
-    currentScenario = "base";
-    setScenarioActiveUI();
-
-    lastComputed = null;
-    renderKPIs({ ok: false });
-    renderScenario({ ok: false }, currentScenario);
-
-    history.replaceState(null, "", location.pathname);
-    setReady("Ready.");
-  }
-
-  function setScenarioActiveUI() {
-    els.scnButtons.forEach((b) => {
-      const k = b.getAttribute("data-scn");
-      if (k === currentScenario) b.classList.add("is-active");
-      else b.classList.remove("is-active");
+    // convert numeric strings where relevant
+    ["tp","eu","eut","i","cp","ex","fx"].forEach(k => {
+      if (st[k] === null || st[k] === "") return;
+      const v = Number(st[k]);
+      if (Number.isFinite(v)) st[k] = v;
     });
+
+    return st;
   }
 
-  function onScenarioClick(ev) {
-    const btn = ev.currentTarget;
-    const k = btn.getAttribute("data-scn");
-    if (!k || !SCENARIOS[k]) return;
-
-    currentScenario = k;
-    setScenarioActiveUI();
-
-    const res = lastComputed ?? computeFromInputs();
-    lastComputed = res;
-
-    // scenario does not change base KPIs, only scenario cards
-    renderScenario(res, currentScenario);
-
-    if (res.ok) writeUrlState(res);
-    setReady(`Scenario: ${currentScenario}`);
+  function replaceUrlWithState(base) {
+    const st = buildState(base);
+    const q = stateToQuery(st);
+    const url = q ? `${window.location.pathname}?${q}` : window.location.pathname;
+    window.history.replaceState(null, "", url);
   }
 
-  function onToggleInputs() {
-    const panel = els.inputsPanel;
-    if (!panel) return;
+  // ---------- Actions ----------
+  function doApply() {
+    const base = computeBase();
+    renderKPIs(base);
+    renderScenarioTiles(base);
+    replaceUrlWithState(base);
 
-    const hidden = panel.getAttribute("aria-hidden") === "true";
-    panel.setAttribute("aria-hidden", hidden ? "false" : "true");
-    panel.style.display = hidden ? "" : "none";
+    // Small UX: show "Updated." if any element exists with that text target
+    const ready = safeQS(".status") || safeQS(".ready") || safeQS("[data-status]");
+    if (ready) setText(ready, "Updated.");
   }
 
-  async function onCopyLink() {
+  function doReset() {
+    euTonsManual = false;
+    activeScenario = "base";
+    setActiveScenario("base");
+
+    if (elTotalProd) elTotalProd.value = "";
+    if (elEuShare)   elEuShare.value = "";
+    if (elEuTons)    elEuTons.value = "";
+    if (elIntensity) elIntensity.value = "";
+    if (elCp)        elCp.value = "";
+    if (elExempt)    elExempt.value = "";
+    if (elEurusd)    elEurusd.value = "";
+    if (elRoute)     elRoute.value = "";
+
+    // clear URL
+    window.history.replaceState(null, "", window.location.pathname);
+
+    // clear outputs
+    renderKPIs({ euTons: 0, intensity: 0, cp: 0, gross: 0, perTon: 0, emissions: 0, net: 0, exempt: 0 });
+    renderScenarioTiles({ cp: 0, intensity: 0, euTons: 0, exempt: 0 });
+
+    // close inputs if panel exists and is open
+    if (inputsPanel) {
+      inputsPanel.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  async function copyShareLink() {
+    const base = computeBase();
+    const st = buildState(base);
+    const q = stateToQuery(st);
+    const full = `${window.location.origin}${window.location.pathname}${q ? "?" + q : ""}`;
     try {
-      await navigator.clipboard.writeText(location.href);
-      setReady("Share link copied.");
+      await navigator.clipboard.writeText(full);
+      // Optional: quick feedback
+      if (btnCopyLink) {
+        const old = btnCopyLink.textContent;
+        btnCopyLink.textContent = "Copied ✓";
+        setTimeout(() => { btnCopyLink.textContent = old; }, 900);
+      }
     } catch {
-      // fallback
-      const tmp = document.createElement("textarea");
-      tmp.value = location.href;
-      document.body.appendChild(tmp);
-      tmp.select();
-      document.execCommand("copy");
-      tmp.remove();
-      setReady("Share link copied.");
+      // fallback prompt
+      window.prompt("Copy this link:", full);
     }
   }
 
-  function onPrint() {
-    window.print();
-  }
+  function downloadCSV() {
+    const base = computeBase();
+    const sBase = scenarioFromBase(base, "base");
+    const sCon  = scenarioFromBase(base, "conservative");
+    const sStr  = scenarioFromBase(base, "stress");
 
-  function buildCsvRow(res) {
-    // Core KPIs in EUR. FX only for optional USD display.
-    const fx = Number.isFinite(res.eurusd) && res.eurusd > 0 ? res.eurusd : NaN;
-    const usdNet = Number.isFinite(fx) ? res.netExposure * fx : NaN;
+    const rows = [
+      ["Field", "Value", "Unit/Note"],
+      ["Total production", base.totalProd, "t/y"],
+      ["EU share", base.euShare, "%"],
+      ["EU tons", base.euTons, "t/y"],
+      ["Emissions intensity", base.intensity, "tCO2/t exported"],
+      ["Carbon price", base.cp, "€/tCO2"],
+      ["Exemptions / free allocation", base.exempt, "%"],
+      ["FX EUR/USD (optional)", base.eurusd || "", "display-only"],
+      ["Route label", base.route || "", ""],
+      ["---", "", ""],
+      ["Annual CBAM exposure (gross)", base.gross, "€/year"],
+      ["Covered emissions (gross)", base.emissions, "tCO2"],
+      ["Net exposure after exemptions", base.net, "€/year"],
+      ["CBAM cost per ton exported", base.perTon, "€/t"],
+      ["--- Scenarios (stress-test model) ---", "", ""],
+      ["Base: carbon price", sBase.scnCp, "€/tCO2"],
+      ["Base: intensity", sBase.scnInt, "tCO2/t"],
+      ["Base: annual exposure", sBase.annual, "€/year"],
+      ["Base: €/t exported", sBase.perTon, "€/t"],
+      ["Conservative: carbon price", sCon.scnCp, "€/tCO2"],
+      ["Conservative: intensity", sCon.scnInt, "tCO2/t"],
+      ["Conservative: annual exposure", sCon.annual, "€/year"],
+      ["Conservative: €/t exported", sCon.perTon, "€/t"],
+      ["Stress: carbon price", sStr.scnCp, "€/tCO2"],
+      ["Stress: intensity", sStr.scnInt, "tCO2/t"],
+      ["Stress: annual exposure", sStr.annual, "€/year"],
+      ["Stress: €/t exported", sStr.perTon, "€/t"],
+    ];
 
-    return {
-      route: res.route || "",
-      scenario: currentScenario,
-      totalProd_t_y: res.totalProd,
-      euShare_pct: res.euShare,
-      euTons_t_y: res.euTons,
-      intensity_tco2_per_t: res.intensity,
-      carbonPrice_eur_per_tco2: res.cp,
-      exemptions_pct: res.exempt,
-      coveredEmissions_tco2: res.coveredEmissions,
-      grossExposure_eur: res.grossExposure,
-      netExposure_eur: res.netExposure,
-      perTon_eur_per_t: res.perTon,
-      fx_eurusd_optional: Number.isFinite(res.eurusd) ? res.eurusd : "",
-      netExposure_usd_optional: Number.isFinite(usdNet) ? usdNet : "",
-    };
-  }
+    const csv = rows
+      .map(r => r.map(x => {
+        const s = String(x ?? "");
+        // quote if contains comma/quote/newline
+        if (/[,"\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+        return s;
+      }).join(","))
+      .join("\n");
 
-  function downloadCsv() {
-    const res = lastComputed ?? computeFromInputs();
-    if (!res.ok) {
-      setReady("Apply valid inputs first, then export CSV.");
-      return;
-    }
-
-    const row = buildCsvRow(res);
-    const headers = Object.keys(row);
-    const values = headers.map((h) => {
-      const v = row[h];
-      if (v === null || v === undefined) return "";
-      const s = String(v);
-      // CSV escape
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    });
-
-    const csv = `${headers.join(",")}\n${values.join(",")}\n`;
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
 
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `cbam_board_view_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.href = url;
+    a.download = "cbam-board-view.csv";
     document.body.appendChild(a);
     a.click();
     a.remove();
 
-    setReady("CSV downloaded.");
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
   }
 
-  // ---------- wire events ----------
-  function bindEvents() {
-    // Apply / Reset
-    els.applyBtn?.addEventListener("click", onApply);
-    els.resetBtn?.addEventListener("click", onReset);
+  function toggleInputsPanel() {
+    if (!inputsPanel) return;
+    const hidden = inputsPanel.getAttribute("aria-hidden") !== "false";
+    inputsPanel.setAttribute("aria-hidden", hidden ? "false" : "true");
+  }
 
-    // Auto EU tons when production/share changes (only if EU tons empty)
-    els.totalProd?.addEventListener("input", () => syncAutoEuTonsIfNeeded());
-    els.euShare?.addEventListener("input", () => syncAutoEuTonsIfNeeded());
+  // ---------- PWA install ----------
+  let deferredPrompt = null;
 
-    // Scenario buttons
-    els.scnButtons.forEach((b) => b.addEventListener("click", onScenarioClick));
+  function setupPwaInstall() {
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      if (btnInstall) btnInstall.hidden = false;
+    });
 
-    // Top buttons
-    els.btnToggleInputs?.addEventListener("click", onToggleInputs);
-    els.btnCopyLink?.addEventListener("click", onCopyLink);
-    els.btnCsv?.addEventListener("click", downloadCsv);
-    els.btnPrint?.addEventListener("click", onPrint);
+    if (btnInstall) {
+      btnInstall.addEventListener("click", async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        try { await deferredPrompt.userChoice; } catch {}
+        deferredPrompt = null;
+        btnInstall.hidden = true;
+      });
+    }
+  }
 
-    // Enter key triggers Apply (nice on tablets)
-    [
-      els.totalProd,
-      els.euShare,
-      els.euTons,
-      els.intensity,
-      els.cp,
-      els.exempt,
-      els.eurusd,
-      els.route,
-    ].forEach((el) => {
-      el?.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") onApply();
+  // ---------- Bind events ----------
+  function bind() {
+    // Track manual override on EU tons
+    if (elEuTons) {
+      elEuTons.addEventListener("input", () => {
+        const v = String(elEuTons.value || "").trim();
+        euTonsManual = v.length > 0; // if user typed something, treat as manual
+      });
+    }
+
+    // If totalProd / euShare changed and not manual -> auto-update euTons live (optional)
+    const recalcEuTonsLive = () => {
+      if (!elEuTons || euTonsManual) return;
+      const tp = num(elTotalProd?.value, 0);
+      const eu = num(elEuShare?.value, 0);
+      const auto = tp * (eu / 100);
+      elEuTons.value = auto ? fmt0(auto).replace(/,/g, "") : "";
+    };
+
+    elTotalProd?.addEventListener("input", recalcEuTonsLive);
+    elEuShare?.addEventListener("input", recalcEuTonsLive);
+
+    // Buttons
+    btnApply?.addEventListener("click", (e) => { e.preventDefault(); doApply(); });
+    btnReset?.addEventListener("click", (e) => { e.preventDefault(); doReset(); });
+
+    btnToggleInputs?.addEventListener("click", (e) => { e.preventDefault(); toggleInputsPanel(); });
+    btnCopyLink?.addEventListener("click", (e) => { e.preventDefault(); copyShareLink(); });
+    btnCsv?.addEventListener("click", (e) => { e.preventDefault(); downloadCSV(); });
+    btnPrint?.addEventListener("click", (e) => { e.preventDefault(); window.print(); });
+
+    // Scenario switching
+    scnBtns.forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const which = btn.getAttribute("data-scn") || "base";
+        setActiveScenario(which);
+        doApply(); // re-render with active scenario + update share URL
       });
     });
   }
 
-  // ---------- init ----------
+  // ---------- Init ----------
   function init() {
-    readUrlState();
-    setScenarioActiveUI();
-    bindEvents();
+    // Restore state from URL (if present)
+    const st = queryToState();
+    if (st) applyStateToInputs(st);
 
-    // Try initial compute if URL has enough
-    const res = computeFromInputs();
-    lastComputed = res;
+    // Ensure scenario buttons reflect current state
+    setActiveScenario(activeScenario);
 
-    renderKPIs(res);
-    renderScenario(res, currentScenario);
+    // First render (without forcing “Apply” requirement)
+    // But we keep “—” if incomplete.
+    doApply();
 
-    // keep euTons auto if blank
-    syncAutoEuTonsIfNeeded();
+    // Bind events last
+    bind();
 
-    setReady("Ready.");
+    // PWA install
+    setupPwaInstall();
   }
 
-  // Ensure DOM ready
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
   } else {
