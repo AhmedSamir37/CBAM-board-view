@@ -87,33 +87,59 @@
       </div>
     </section>
 
-    <section class="panel panel--results">
-      <div class="panel__head">
-        <div class="panel__title">Results</div>
-        <div class="panel__hint">Board-ready KPIs + scenarios.</div>
+   <div class="panel panel--results">
+  <div class="panel__head">
+    <div class="panel__title">Results</div>
+    <div class="panel__hint">Board-ready KPIs + scenarios.</div>
+  </div>
+
+  <div class="panel__body">
+    <div class="kpis">
+
+      <div class="kpi kpi--hero">
+        <div class="kpi__label">Annual CBAM exposure (EU exports)</div>
+        <div class="kpi__value">
+          <span id="kpiAnnual">—</span>
+          <span class="kpi__unit">€/year</span>
+        </div>
+        <div class="kpi__sub" id="kpiAnnualSub">Enter inputs then Apply</div>
       </div>
 
-      <div class="kpis">
-        <div class="kpi">
-<div class="kpi__value"><span id="kpiAnnual">—</span><span class="kpi__unit"> €/year</span></div>
-<div class="kpi__sub" id="kpiAnnualSub">Enter inputs then Apply</div>
-
-        <div class="kpi">
-          <div class="kpi__label">CBAM cost per ton exported</div>
-          <div class="kpi__value"><span id="kpiPerTon">—</span><span class="kpi__unit"> €/t</span></div>
- <div class="kpi__sub" id="kpiPerTonSub">CBAM cost per ton exported</div>
+      <div class="kpi">
+        <div class="kpi__label">CBAM cost per ton exported</div>
+        <div class="kpi__value">
+          <span id="kpiPerTon">—</span>
+          <span class="kpi__unit">€/t</span>
         </div>
-
-        <div class="kpi">
-          <div class="kpi__value"><span id="kpiEmissions">—</span><span class="kpi__unit"> tCO₂</span></div>
-<div class="kpi__sub" id="kpiEmissionsSub">Covered emissions on EU exports</div>
-
-        <div class="kpi">
-          <div class="kpi__label">Net exposure after exemptions</div>
-          <div class="kpi__value"><span id="kpiNet">—</span><span class="kpi__unit"> €/year</span></div>
-          <div class="kpi__sub" id="kpiNetSub">—</div>
-        </div>
+        <div class="kpi__sub" id="kpiPerTonSub">—</div>
       </div>
+
+      <div class="kpi">
+        <div class="kpi__label">Covered emissions (EU exports)</div>
+        <div class="kpi__value">
+          <span id="kpiEmissions">—</span>
+          <span class="kpi__unit">tCO₂</span>
+        </div>
+        <div class="kpi__sub" id="kpiEmissionsSub">—</div>
+      </div>
+
+      <div class="kpi">
+        <div class="kpi__label">Net exposure after exemptions</div>
+        <div class="kpi__value">
+          <span id="kpiNet">—</span>
+          <span class="kpi__unit">€/year</span>
+        </div>
+        <div class="kpi__sub" id="kpiNetSub">—</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="note">
+    Note: Simplified by design for decision stress-testing. Real CBAM reporting requires verified boundaries,
+    product method rules, and MRV.
+  </div>
+</div> 
 
       <div class="scenarios">
         <div class="scenarios__head">
