@@ -4,23 +4,23 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#0b1320" />
-  <meta name="description" content="Decision-grade CBAM exposure tool for steel (EAF/DRI). Board-ready KPIs, scenarios, shareable URL state." />
-
-  <title>CBAM Board View</title>
+  <meta name="description" content="Decision-grade CBAM exposure tool for steel (EAF/DRI). Board KPIs + scenarios. Offline-ready." />
 
   <link rel="manifest" href="./manifest.webmanifest?v=20260205v3" />
   <link rel="icon" href="./icons/icon-192.png" />
   <link rel="apple-touch-icon" href="./icons/icon-192.png" />
 
+  <title>CBAM Board View</title>
   <link rel="stylesheet" href="./styles.v3.css?v=20260205v3" />
 </head>
 
 <body>
+  <!-- Top bar -->
   <header class="topbar">
     <div class="inner">
       <div class="brand">
         <div class="brand__title">CBAM Board View</div>
-        <div class="brand__sub">Steel — EAF/DRI · Board KPIs · Shareable scenarios · Offline-ready</div>
+        <div class="brand__sub">Steel – EAF/DRI · Board KPIs · Shareable scenarios · Offline-ready</div>
       </div>
 
       <div class="actions">
@@ -33,32 +33,29 @@
     </div>
   </header>
 
-  <main class="wrap">
-    <!-- INPUTS PANEL -->
+  <main class="layout">
+    <!-- Inputs panel -->
     <section class="panel panel--inputs" id="inputsPanel" aria-hidden="false">
       <div class="panel__head">
-        <div>
-          <div class="panel__title">Inputs</div>
-          <div class="panel__hint">These drive all KPIs and scenarios.</div>
-        </div>
-        <div class="status" id="statusText">Ready.</div>
+        <div class="panel__title">Inputs</div>
+        <div class="panel__hint">These drive all KPIs and scenarios.</div>
       </div>
 
       <div class="grid">
         <div class="field">
           <label>Total production (t/y)</label>
-          <input id="totalProd" type="number" min="0" step="1000" placeholder="e.g., 1000000" />
+          <input id="totalProd" type="number" min="0" step="1000" placeholder="e.g., 4500000" />
         </div>
 
         <div class="field">
           <label>EU share (%)</label>
-          <input id="euShare" type="number" min="0" max="100" step="0.1" placeholder="e.g., 20" />
+          <input id="euShare" type="number" min="0" max="100" step="0.1" placeholder="e.g., 18" />
         </div>
 
         <div class="field">
           <label>EU tons (t/y)</label>
           <input id="euTons" type="number" min="0" step="100" placeholder="Auto-calculated (can override)" />
-          <div class="helper">Auto-calculated from production × EU share (can override).</div>
+          <div class="field_note">Auto-calculated from production × EU share (can override).</div>
         </div>
 
         <div class="field">
@@ -79,7 +76,7 @@
         <div class="field">
           <label>FX: EUR/USD (optional)</label>
           <input id="eurusd" type="number" min="0" step="0.0001" placeholder="e.g., 1.10" />
-          <div class="helper">Only used for display in CSV (optional). Core KPIs remain in EUR.</div>
+          <div class="field_note">Only used for display in CSV (optional). Core KPIs remain in EUR.</div>
         </div>
 
         <div class="field">
@@ -89,50 +86,49 @@
       </div>
 
       <div class="panel__foot">
-        <button class="btn btn--primary" id="btnApply" type="button">Apply</button>
-        <button class="btn btn--ghost" id="btnReset" type="button">Reset</button>
+        <button class="btn btn--primary" id="applyBtn" type="button">Apply</button>
+        <button class="btn btn--ghost" id="resetBtn" type="button">Reset</button>
+        <div class="muted" id="statusText">Ready.</div>
       </div>
     </section>
 
-    <!-- RESULTS PANEL -->
-    <section class="panel panel--results" id="resultsPanel">
+    <!-- Results panel -->
+    <section class="panel panel--results">
       <div class="panel__head">
-        <div>
-          <div class="panel__title">Results</div>
-          <div class="panel__hint">Board-ready KPIs + scenarios.</div>
-        </div>
+        <div class="panel__title">Results</div>
+        <div class="panel__hint">Board-ready KPIs + scenarios.</div>
       </div>
 
       <div class="kpis">
         <div class="kpi">
           <div class="kpi__label">Annual CBAM exposure (EU exports)</div>
-          <div class="kpi__value"><span id="kpiAnnual">—</span><span class="kpi__unit"> €/year</span></div>
+          <div class="kpi__value"><span id="kpiAnnual">—</span><span class="kpi__unit">€/year</span></div>
           <div class="kpi__sub" id="kpiAnnualSub">Enter inputs then Apply</div>
         </div>
 
         <div class="kpi">
           <div class="kpi__label">CBAM cost per ton exported</div>
-          <div class="kpi__value"><span id="kpiPerTon">—</span><span class="kpi__unit"> €/t</span></div>
+          <div class="kpi__value"><span id="kpiPerTon">—</span><span class="kpi__unit">€/t</span></div>
           <div class="kpi__sub" id="kpiPerTonSub">—</div>
         </div>
 
         <div class="kpi">
           <div class="kpi__label">Covered emissions (EU exports)</div>
-          <div class="kpi__value"><span id="kpiEmissions">—</span><span class="kpi__unit"> tCO₂</span></div>
+          <div class="kpi__value"><span id="kpiEmissions">—</span><span class="kpi__unit">tCO₂</span></div>
           <div class="kpi__sub" id="kpiEmissionsSub">—</div>
         </div>
 
         <div class="kpi">
           <div class="kpi__label">Net exposure after exemptions</div>
-          <div class="kpi__value"><span id="kpiNet">—</span><span class="kpi__unit"> €/year</span></div>
+          <div class="kpi__value"><span id="kpiNet">—</span><span class="kpi__unit">€/year</span></div>
           <div class="kpi__sub" id="kpiNetSub">—</div>
         </div>
       </div>
 
       <div class="scenarios">
         <div class="scenarios__head">
-          <div class="panel__title">Scenarios</div>
-          <div class="seg" role="tablist" aria-label="Scenario selector">
+          <div class="panel__title" style="margin:0;">Scenarios</div>
+          <div class="seg">
             <button class="seg__btn is-active" data-scn="base" type="button">Base</button>
             <button class="seg__btn" data-scn="conservative" type="button">Conservative</button>
             <button class="seg__btn" data-scn="stress" type="button">Stress</button>
@@ -166,18 +162,18 @@
         </div>
 
         <div class="disclaimer">
-          <strong>Note:</strong> Simplified by design for decision stress-testing.
-          Real CBAM reporting requires verified boundaries, product method rules, and MRV.
+          <strong>Note:</strong> Simplified by design for decision stress-testing. Real CBAM reporting requires verified boundaries, product method rules, and MRV.
         </div>
       </div>
     </section>
   </main>
 
   <footer class="foot">
-    <div class="muted">v20260205v3 · Shareable URL state · No SW caching (for stability)</div>
+    <div class="muted">v20260205v3 · Offline-ready · Shareable URL state</div>
   </footer>
 
-  <!-- IMPORTANT: We intentionally do NOT load app.js الآن لتجنب أي Service Worker كاش -->
+  <!-- Keep as-is if both exist in repo -->
+  <script src="./app.js?v=20260205v3"></script>
   <script src="./script.js?v=20260205v3"></script>
 </body>
 </html>
