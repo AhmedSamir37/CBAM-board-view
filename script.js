@@ -3,11 +3,25 @@
 
   const VERSION = "20260205v3";
 
+  // ✅ Kill any old PWA caches / service workers that might be hijacking updates
+  async function nukePwaCaches() {
+    try {
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      }
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
+
   // ---------- Helpers ----------
   const $ = (id) => document.getElementById(id);
-
   const clamp = (x, a, b) => Math.min(Math.max(x, a), b);
-
   const toNum = (v) => {
     const n = Number(v);
     return Number.isFinite(n) ? n : NaN;
@@ -30,29 +44,7 @@
 
   const setStatus = (msg) => setText("statusText", msg);
 
-  // ---------- DOM ----------
-  const dom = {
-    totalProd: $("totalProd"),
-    euShare: $("euShare"),
-    euTons: $("euTons"),
-    intensity: $("intensity"),
-    cp: $("cp"),
-    exempt: $("exempt"),
-    eurusd: $("eurusd"),
-    route: $("route"),
-
-    btnApply: $("btnApply"),
-    btnReset: $("btnReset"),
-    btnToggleInputs: $("btnToggleInputs"),
-    btnCopyLink: $("btnCopyLink"),
-    btnCsv: $("btnCsv"),
-    btnPrint: $("btnPrint"),
-    btnInstall: $("btnInstall"),
-
-    inputsPanel: $("inputsPanel"),
-  };
-
-  // Guard: if HTML IDs are wrong, stop loudly.
+  // ---------- Guard ----------
   const requiredIds = [
     "btnApply","btnReset","btnToggleInputs","btnCopyLink","btnCsv","btnPrint",
     "totalProd","euShare","euTons","intensity","cp","exempt","eurusd","route",
@@ -70,11 +62,32 @@
     }
   }
 
+  // ---------- DOM ----------
+  const dom = {
+    totalProd: $("totalProd"),
+    euShare: $("euShare"),
+    euTons: $("euTons"),
+    intensity: $("intensity"),
+    cp: $("cp"),
+    exempt: $("exempt"),
+    eurusd: $("eurusd"),
+    route: $("route"),
+
+    btnApply: $("btnApply"),
+    btnReset: $("btnReset"),
+    btnToggleInputs: $("btnToggleInputs"),
+    btnCopyLink: $("btnCopyLink"),
+    btnCsv: $("btnCsv"),
+    btnPrint: $("btnPrint"),
+
+    inputsPanel: $("inputsPanel"),
+  };
+
   // ---------- State ----------
   const DEFAULTS = {
     totalProd: 1000000,
     euShare: 20,
-    euTons: NaN,        // auto unless user overrides
+    euTons: NaN,        // auto unless overridden
     intensity: 2.10,
     cp: 80,
     exempt: 0,
@@ -90,7 +103,6 @@
   };
 
   // ---------- URL State ----------
-  // q params: p, s, e, i, cp, x, fx, r
   function writeUrlState() {
     const u = new URL(window.location.href);
     const q = u.searchParams;
@@ -142,7 +154,7 @@
     if (typeof r === "string" && r.trim()) state.inputs.route = r.trim();
   }
 
-  // ---------- UI sync ----------
+  // ---------- UI Sync ----------
   function syncInputsToUI() {
     dom.totalProd.value = Number.isFinite(state.inputs.totalProd) ? String(state.inputs.totalProd) : "";
     dom.euShare.value = Number.isFinite(state.inputs.euShare) ? String(state.inputs.euShare) : "";
@@ -168,7 +180,6 @@
       state.inputs.euTons = euT;
       euTonsOverridden = true;
     } else {
-      // if empty and not overridden, keep NaN to auto-calc
       if (!euTonsOverridden) state.inputs.euTons = NaN;
     }
   }
@@ -176,23 +187,20 @@
   function autoCalcEuTons() {
     const p = state.inputs.totalProd;
     const s = state.inputs.euShare;
-
     if (!Number.isFinite(p) || !Number.isFinite(s)) return;
-    const auto = (p * s) / 100;
 
+    const auto = (p * s) / 100;
     if (!euTonsOverridden) {
       state.inputs.euTons = auto;
       dom.euTons.value = String(Math.round(auto));
     }
   }
 
-  // User typing in EU tons => override
   dom.euTons.addEventListener("input", () => {
     const v = toNum(dom.euTons.value);
     euTonsOverridden = Number.isFinite(v) && v > 0;
   });
 
-  // If production/share changes and not overridden => auto-update EU tons
   dom.totalProd.addEventListener("input", () => {
     syncUIToInputs();
     autoCalcEuTons();
@@ -211,7 +219,6 @@
     const cp = inputs.cp;
     const exempt = clamp(inputs.exempt, 0, 100);
 
-    // EU tons: either overridden or auto
     let euTons = inputs.euTons;
     if (!Number.isFinite(euTons)) {
       if (Number.isFinite(totalProd) && Number.isFinite(euShare)) {
@@ -219,58 +226,25 @@
       }
     }
 
-    // Validate
     const ok =
       Number.isFinite(euTons) && euTons > 0 &&
       Number.isFinite(intensity) && intensity >= 0 &&
       Number.isFinite(cp) && cp >= 0;
 
-    if (!ok) {
-      return { ok:false, euTons, reason:"Enter valid EU tons, intensity, and carbon price." };
-    }
+    if (!ok) return { ok:false, euTons, reason:"Enter valid EU tons, intensity, and carbon price." };
 
-    // Covered emissions
-    const emissions = euTons * intensity; // tCO2
-
-    // Gross exposure
-    const gross = emissions * cp; // EUR/year
-
-    // Net after exemptions
+    const emissions = euTons * intensity;
+    const gross = emissions * cp;
     const net = gross * (1 - exempt / 100);
-
-    // €/t exported
     const perTon = net / euTons;
 
-    return {
-      ok:true,
-      euTons,
-      emissions,
-      gross,
-      net,
-      perTon,
-      exempt
-    };
+    return { ok:true, euTons, emissions, gross, net, perTon, exempt };
   }
 
-  // Scenarios: adjust cp & intensity only (simple, board-ready)
   function scenarioAdjust(baseInputs, which) {
     const out = { ...baseInputs };
-    if (which === "base") return out;
-
-    if (which === "conservative") {
-      // More optimistic: lower carbon price & slightly better intensity
-      out.cp = baseInputs.cp * 0.85;
-      out.intensity = baseInputs.intensity * 0.92;
-      return out;
-    }
-
-    if (which === "stress") {
-      // Stress: higher price & worse intensity
-      out.cp = baseInputs.cp * 1.25;
-      out.intensity = baseInputs.intensity * 1.10;
-      return out;
-    }
-
+    if (which === "conservative") { out.cp = baseInputs.cp * 0.85; out.intensity = baseInputs.intensity * 0.92; }
+    if (which === "stress") { out.cp = baseInputs.cp * 1.25; out.intensity = baseInputs.intensity * 1.10; }
     return out;
   }
 
@@ -280,7 +254,6 @@
       setText("kpiPerTon", "—");
       setText("kpiEmissions", "—");
       setText("kpiNet", "—");
-
       setText("kpiAnnualSub", "Enter inputs then Apply");
       setText("kpiPerTonSub", "—");
       setText("kpiEmissionsSub", "—");
@@ -301,37 +274,43 @@
 
   function renderScenario(which) {
     const adj = scenarioAdjust(state.inputs, which);
-    // Ensure EU tons is consistent with override behavior
     if (!euTonsOverridden) adj.euTons = NaN;
 
     const k = computeKPIs(adj);
 
     setText("scnCp", Number.isFinite(adj.cp) ? formatSmart(adj.cp) : "—");
     setText("scnInt", Number.isFinite(adj.intensity) ? formatSmart(adj.intensity) : "—");
-
-    if (!k.ok) {
-      setText("scnAnnual", "—");
-      setText("scnPerTon", "—");
-      return;
-    }
-    setText("scnAnnual", formatSmart(k.net));
-    setText("scnPerTon", formatSmart(k.perTon));
+    setText("scnAnnual", k.ok ? formatSmart(k.net) : "—");
+    setText("scnPerTon", k.ok ? formatSmart(k.perTon) : "—");
   }
 
   function applyAll() {
     syncUIToInputs();
     autoCalcEuTons();
-
     const k = computeKPIs(state.inputs);
     renderKPIs(k);
-
     renderScenario(state.scenario);
     writeUrlState();
-
-    setStatus(k.ok ? "Calculated." : "Missing/invalid inputs — please check EU tons, intensity, carbon price.");
+    setStatus(k.ok ? "Calculated." : "Missing/invalid inputs — check EU tons, intensity, carbon price.");
   }
 
-  // ---------- CSV ----------
+  // ---------- Buttons ----------
+  async function copyShareLink() {
+    writeUrlState();
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setStatus("Share link copied.");
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = window.location.href;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+      setStatus("Share link copied (fallback).");
+    }
+  }
+
   function downloadCSV() {
     syncUIToInputs();
     autoCalcEuTons();
@@ -356,12 +335,12 @@
       ["FX EUR/USD (optional)", fx],
       [],
       ["Scenario","Carbon price","Intensity","EU tons","Covered emissions (tCO2)","Gross EUR/yr","Net EUR/yr","EUR per ton"],
-      csvScenarioRow("Base", base, state.inputs.cp, state.inputs.intensity),
-      csvScenarioRow("Conservative", cons, scenarioAdjust(state.inputs,"conservative").cp, scenarioAdjust(state.inputs,"conservative").intensity),
-      csvScenarioRow("Stress", stress, scenarioAdjust(state.inputs,"stress").cp, scenarioAdjust(state.inputs,"stress").intensity),
+      row("Base", base, state.inputs.cp, state.inputs.intensity),
+      row("Conservative", cons, scenarioAdjust(state.inputs,"conservative").cp, scenarioAdjust(state.inputs,"conservative").intensity),
+      row("Stress", stress, scenarioAdjust(state.inputs,"stress").cp, scenarioAdjust(state.inputs,"stress").intensity),
     ];
 
-    const csv = rows.map(r => r.map(cell => csvCell(cell)).join(",")).join("\n");
+    const csv = rows.map(r => r.map(cell).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
 
@@ -374,51 +353,19 @@
     URL.revokeObjectURL(url);
 
     setStatus("CSV downloaded.");
-  }
 
-  function csvScenarioRow(name, k, cp, intensity) {
-    if (!k.ok) {
-      return [name, cp || "", intensity || "", "", "", "", "", ""];
+    function row(name, k, cp, intensity){
+      if (!k.ok) return [name, cp||"", intensity||"", "", "", "", "", ""].map(cell);
+      return [name, cp, intensity, k.euTons, k.emissions, k.gross, k.net, k.perTon].map(cell);
     }
-    return [
-      name,
-      cp,
-      intensity,
-      k.euTons,
-      k.emissions,
-      k.gross,
-      k.net,
-      k.perTon
-    ];
-  }
 
-  function csvCell(v) {
-    if (v === null || v === undefined) return "";
-    const s = String(v);
-    // Quote if contains comma or quote or newline
-    if (/[,"\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-    return s;
-  }
-
-  // ---------- Share link ----------
-  async function copyShareLink() {
-    writeUrlState();
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      setStatus("Share link copied.");
-    } catch {
-      // fallback
-      const ta = document.createElement("textarea");
-      ta.value = window.location.href;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
-      setStatus("Share link copied (fallback).");
+    function cell(v){
+      if (v === null || v === undefined) return "";
+      const s = String(v);
+      return /[,"\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
     }
   }
 
-  // ---------- Toggle inputs ----------
   function toggleInputs() {
     const hidden = dom.inputsPanel.getAttribute("aria-hidden") === "true";
     dom.inputsPanel.setAttribute("aria-hidden", hidden ? "false" : "true");
@@ -426,22 +373,17 @@
     setStatus(hidden ? "Inputs opened." : "Inputs hidden.");
   }
 
-  // ---------- Reset ----------
   function resetAll() {
     state.inputs = { ...DEFAULTS };
     euTonsOverridden = false;
-
     syncInputsToUI();
     autoCalcEuTons();
-
     renderKPIs({ ok:false });
     renderScenario(state.scenario);
-
     writeUrlState();
     setStatus("Reset to defaults.");
   }
 
-  // ---------- Scenario UI ----------
   function bindScenarioButtons() {
     const btns = Array.from(document.querySelectorAll(".seg__btn"));
     btns.forEach((b) => {
@@ -455,19 +397,10 @@
     });
   }
 
-  // ---------- Print ----------
-  function doPrint() {
-    setStatus("Printing…");
-    window.print();
-  }
-
-  // ---------- Init ----------
   function init() {
     hardCheckIds();
 
-    // Load URL state (if any), else defaults
     readUrlState();
-
     syncInputsToUI();
     autoCalcEuTons();
 
@@ -478,14 +411,17 @@
     dom.btnToggleInputs.addEventListener("click", toggleInputs);
     dom.btnCopyLink.addEventListener("click", copyShareLink);
     dom.btnCsv.addEventListener("click", downloadCSV);
-    dom.btnPrint.addEventListener("click", doPrint);
+    dom.btnPrint.addEventListener("click", () => window.print());
 
-    // First render (no calc yet)
     renderKPIs({ ok:false });
     renderScenario(state.scenario);
 
-    setStatus("Ready. Enter inputs then Apply.");
+    // ✅ This line confirms JS is running
+    setStatus("JS loaded. Enter inputs then Apply.");
   }
 
-  window.addEventListener("DOMContentLoaded", init);
+  window.addEventListener("DOMContentLoaded", async () => {
+    await nukePwaCaches();
+    init();
+  });
 })();
