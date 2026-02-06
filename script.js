@@ -510,10 +510,28 @@ function wireTopBar() {
   if (btnCsv) btnCsv.addEventListener("click", downloadCSV);
   if (btnPrint) btnPrint.addEventListener("click", doPrint);
 }
-
 function wireApplyReset() {
-  if (btnApply) btnApply.addEventListener("click", doApply);
-  if (btnReset) btnReset.addEventListener("click", doReset);
+  if (btnApply) {
+    btnApply.addEventListener("click", () => {
+      try {
+        const s = new Audio("sounds/click.wav");
+        s.volume = 0.30;
+        s.play().catch(() => {});
+      } catch (e) {}
+      doApply();
+    });
+  }
+
+  if (btnReset) {
+    btnReset.addEventListener("click", () => {
+      try {
+        const s = new Audio("sounds/click.wav");
+        s.volume = 0.25;
+        s.play().catch(() => {});
+      } catch (e) {}
+      doReset();
+    });
+  }
 }
 
 function wirePWAInstall() {
