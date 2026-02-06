@@ -12,40 +12,8 @@
 
 /* ===================== UI click sound ===================== */
 let uiClickSound = null;
+
 function initClickSound() {
-  if (uiClickSound) return;
-
-  uiClickSound = new Audio("sounds/click.wav");
-  uiClickSound.preload = "auto";
-  uiClickSound.volume = 0.75;
-
-  // Unlock audio on mobile browsers (must be triggered by a user gesture)
-  const unlock = () => {
-    try {
-      uiClickSound.muted = true;
-      uiClickSound.play().then(() => {
-        uiClickSound.pause();
-        uiClickSound.currentTime = 0;
-        uiClickSound.muted = false;
-      }).catch(() => {
-        uiClickSound.muted = false;
-      });
-    } catch (e) {}
-  };
-
-  document.addEventListener("pointerdown", unlock, { once: true, passive: true });
-  document.addEventListener("touchstart", unlock, { once: true, passive: true });
-  document.addEventListener("keydown", unlock, { once: true });
-}
-
-function playClick() {
-  try {
-    if (!uiClickSound) initClickSound();
-    uiClickSound.currentTime = 0;
-    uiClickSound.play();
-  } catch (e) {}
-}
-
   if (uiClickSound) return;
 
   uiClickSound = new Audio("sounds/click.wav");
@@ -510,28 +478,10 @@ function wireTopBar() {
   if (btnCsv) btnCsv.addEventListener("click", downloadCSV);
   if (btnPrint) btnPrint.addEventListener("click", doPrint);
 }
-function wireApplyReset() {
-  if (btnApply) {
-    btnApply.addEventListener("click", () => {
-      try {
-        const s = new Audio("sounds/click.wav");
-        s.volume = 0.30;
-        s.play().catch(() => {});
-      } catch (e) {}
-      doApply();
-    });
-  }
 
-  if (btnReset) {
-    btnReset.addEventListener("click", () => {
-      try {
-        const s = new Audio("sounds/click.wav");
-        s.volume = 0.25;
-        s.play().catch(() => {});
-      } catch (e) {}
-      doReset();
-    });
-  }
+function wireApplyReset() {
+  if (btnApply) btnApply.addEventListener("click", doApply);
+  if (btnReset) btnReset.addEventListener("click", doReset);
 }
 
 function wirePWAInstall() {
