@@ -1,14 +1,66 @@
-٥/* ==========================================================
-   CBAM Board View (Steel – EAF/DRI) — script.js (CLEAN v3.2)
+/* ==========================================================
+   CBAM Board View (Steel – EAF/DRI) — script.js (CLEAN v4.0)
+   - Robust button wiring (Apply/Reset works even if IDs differ)
    - Strong KPI rendering (— when not enough inputs)
    - Scenarios: Base / Conservative / Stress
    - Auto EU tons unless overridden
-   - Shareable URL hash state
+   - Shareable URL hash state + LocalStorage
    - Copy link / CSV / Print
    - PWA install support
    - Soft click sound (mobile-safe unlock)
    ========================================================== */
 "use strict";
+
+/* ===================== Small helpers ===================== */
+const $ = (id) => document.getElementById(id);
+
+const num = (v, fallback = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+
+const safeStr = (v, fallback = "") => {
+  if (v === null || v === undefined) return fallback;
+  const s = String(v);
+  return (s === "null" || s === "undefined") ? fallback : s;
+};
+
+const fmtNumber = (n, decimals = 0) => {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return "—";
+  return x.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+};
+
+const setText = (el, txt) => { if (el) el.textContent = txt; };
+const setVal  = (el, v)   => { if (el) el.value = v; };
+
+/* ===================== Robust element finding ===================== */
+function findButtonByText(exactLowerText) {
+  const t = exactLowerText.toLowerCase();
+  const btns = [...document.querySelectorAll("button")];
+  return btns.find(b => (b.textContent || "").trim().toLowerCase() === t) || null;
+}
+
+function findFirstExistingId(ids) {
+  for (const id of ids) {
+    const el = $(id);
+    if (el) return el;
+  }
+  return null;
+}
+
+function anyButtonSelector(selectors) {
+  for (const sel of selectors) {
+    const el = document.querySelector(sel);
+    if (el) return el;
+  }
+  return null;
+}
 
 /* ===================== UI click sound ===================== */
 let uiClickSound = null;
@@ -16,21 +68,22 @@ let uiClickSound = null;
 function initClickSound() {
   if (uiClickSound) return;
 
+  // IMPORTANT: file must exist at /sounds/click.wav (lowercase)
   uiClickSound = new Audio("sounds/click.wav");
   uiClickSound.preload = "auto";
-  uiClickSound.volume = 0.25; // خفيف وواضح
+  uiClickSound.volume = 0.25;
 
-  // Unlock audio on mobile browsers (must be triggered by a user gesture)
+  // Unlock on mobile: must happen after a user gesture
   const unlock = () => {
     try {
-      uiClickSound
-        .play()
+      uiClickSound.play()
         .then(() => {
           uiClickSound.pause();
           uiClickSound.currentTime = 0;
         })
         .catch(() => {});
-    } catch (e) {}
+    } catch (_) {}
+
     document.removeEventListener("pointerdown", unlock);
     document.removeEventListener("keydown", unlock);
   };
@@ -43,99 +96,26 @@ function playClick() {
   if (!uiClickSound) return;
   try {
     uiClickSound.currentTime = 0;
-    uiClickSound.play();
-  } catch (e) {}
+    uiClickSound.play().catch(() => {});
+  } catch (_) {}
 }
 
 function wireClickSound() {
-  // Play for ANY button click (clean + consistent)
+  // Play for ANY enabled button click
   document.addEventListener("click", (e) => {
     const btn = e.target.closest("button");
     if (!btn || btn.disabled) return;
     playClick();
   });
 }
-/* ========================================================== */
 
-/* ---------------- Helpers ---------------- */
-const $ = (id) => document.getElementById(id);
-
-function num(v, fallback = 0) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-function clamp(n, min, max) {
-  return Math.min(max, Math.max(min, n));
-}
-
-function safeStr(v, fallback = "") {
-  if (v === null || v === undefined) return fallback;
-  const s = String(v);
-  return s === "null" || s === "undefined" ? fallback : s;
-}
-
-function fmtNumber(n, decimals = 0) {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return "—";
-  return x.toLocaleString(undefined, {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
-}
-
-function setText(el, txt) {
-  if (el) el.textContent = txt;
-}
-
-function setVal(el, v) {
-  if (el) el.value = v;
-}
-
-/* ---------------- DOM (IDs must match index.html) ---------------- */
-// Inputs
-const elTotalProd = $("totalProd");
-const elEuShare = $("euShare");
-const elEuTons = $("euTons");
-const elIntensity = $("intensity");
-const elCp = $("cp");
-const elExempt = $("exempt");
-const elFx = $("eurusd");
-const elRoute = $("route");
-
-// Buttons
-const btnToggleInputs = $("btnToggleInputs");
-const btnCopyLink = $("btnCopyLink");
-const btnCsv = $("btnCsv");
-const btnPrint = $("btnPrint");
-const btnInstall = $("btnInstall");
-const btnApply = $("btnApply");
-const btnReset = $("btnReset");
-
-// Panels / status
-const inputsPanel = $("inputsPanel");
-const statusText = $("statusText");
-
-// KPI outputs
-const outAnnual = $("kpiAnnual");
-const outPerTon = $("kpiPerTon");
-const outTco2 = $("kpiTco2");
-const outNet = $("kpiNet");
-const outAnnualNote = $("kpiAnnualNote");
-
-// Scenario outputs
-const scnCp = $("scnCp");
-const scnInt = $("scnInt");
-const scnAnnual = $("scnAnnual");
-const scnPerTon = $("scnPerTon");
-
-/* ---------------- State ---------------- */
-const STORAGE_KEY = "cbam_board_view_v32";
+/* ===================== Scenario model ===================== */
+const STORAGE_KEY = "cbam_board_view_v40";
 
 const SCENARIOS = {
-  base: { cpMult: 1.0, intMult: 1.0 },
+  base:         { cpMult: 1.00, intMult: 1.00 },
   conservative: { cpMult: 0.85, intMult: 0.92 },
-  stress: { cpMult: 1.25, intMult: 1.15 },
+  stress:       { cpMult: 1.25, intMult: 1.15 },
 };
 
 let currentScenario = "base";
@@ -144,90 +124,136 @@ let euTonsOverridden = false;
 // PWA
 let deferredInstallPrompt = null;
 
-/* ---------------- Core Math ----------------
-   Covered tCO2 = EU_tons * intensity
-   Gross €/year = Covered tCO2 * carbon_price
-   Net €/year   = Gross * (1 - exemptions%)
-   €/t exported = Net / EU_tons
--------------------------------------------- */
+/* ===================== DOM mapping (by IDs) ===================== */
+/*
+  These IDs are your "expected" ones:
+  totalProd, euShare, euTons, intensity, cp, exempt, eurusd, route
+  outputs: kpiAnnual, kpiPerTon, kpiTco2, kpiNet, kpiAnnualNote
+  scenario outputs: scnCp, scnInt, scnAnnual, scnPerTon
+  misc: inputsPanel, statusText
+  top buttons: btnToggleInputs, btnCopyLink, btnCsv, btnPrint, btnInstall
+  apply/reset (IDs may differ — we robust-find them)
+*/
+const elTotalProd = $("totalProd");
+const elEuShare   = $("euShare");
+const elEuTons    = $("euTons");
+const elIntensity = $("intensity");
+const elCp        = $("cp");
+const elExempt    = $("exempt");
+const elFx        = $("eurusd");
+const elRoute     = $("route");
+
+const inputsPanel = $("inputsPanel");
+const statusText  = $("statusText");
+
+const outAnnual     = $("kpiAnnual");
+const outPerTon     = $("kpiPerTon");
+const outTco2       = $("kpiTco2");
+const outNet        = $("kpiNet");
+const outAnnualNote = $("kpiAnnualNote");
+
+const scnCp     = $("scnCp");
+const scnInt    = $("scnInt");
+const scnAnnual = $("scnAnnual");
+const scnPerTon = $("scnPerTon");
+
+// Top bar buttons (try common IDs, then selectors)
+const btnToggleInputs =
+  $("btnToggleInputs") || $("toggleInputs") || anyButtonSelector(['button[data-action="toggle-inputs"]']);
+
+const btnCopyLink =
+  $("btnCopyLink") || $("copyLink") || anyButtonSelector(['button[data-action="copy-link"]']);
+
+const btnCsv =
+  $("btnCsv") || $("downloadCsv") || anyButtonSelector(['button[data-action="csv"]']);
+
+const btnPrint =
+  $("btnPrint") || $("printBtn") || anyButtonSelector(['button[data-action="print"]']);
+
+const btnInstall =
+  $("btnInstall") || $("installBtn") || anyButtonSelector(['button[data-action="install"]']);
+
+// Apply/Reset: robust lookup
+const btnApply = findFirstExistingId(["btnApply", "apply", "applyBtn"]) || findButtonByText("apply");
+const btnReset = findFirstExistingId(["btnReset", "reset", "resetBtn"]) || findButtonByText("reset");
+
+/* ===================== Core math ===================== */
 function readInputs() {
   const totalProd = Math.max(0, num(elTotalProd?.value, 0));
-  const euShare = clamp(num(elEuShare?.value, 0), 0, 100);
+  const euShare   = clamp(num(elEuShare?.value, 0), 0, 100);
 
   const autoEuTons = totalProd * (euShare / 100);
   let euTons = Math.max(0, num(elEuTons?.value, 0));
 
-  // Auto-fill unless overridden
   if (!euTonsOverridden) {
     euTons = autoEuTons;
 
-    // avoid fighting user while typing
+    // do not fight user typing
     if (elEuTons && document.activeElement !== elEuTons) {
       setVal(elEuTons, autoEuTons ? String(Math.round(autoEuTons)) : "");
     }
   }
 
   const intensity = Math.max(0, num(elIntensity?.value, 0));
-  const cp = Math.max(0, num(elCp?.value, 0));
-  const exempt = clamp(num(elExempt?.value, 0), 0, 100);
-  const fx = Math.max(0, num(elFx?.value, 0)); // optional
-  const route = safeStr(elRoute?.value, "").trim();
+  const cp        = Math.max(0, num(elCp?.value, 0));
+  const exempt    = clamp(num(elExempt?.value, 0), 0, 100);
+  const fx        = Math.max(0, num(elFx?.value, 0)); // optional
+  const route     = safeStr(elRoute?.value, "").trim();
 
   return { totalProd, euShare, autoEuTons, euTons, intensity, cp, exempt, fx, route };
 }
 
-function hasEnough(inputs) {
-  // Board-grade minimum: EU tons > 0 AND cp > 0 AND intensity > 0
-  return inputs.euTons > 0 && inputs.cp > 0 && inputs.intensity > 0;
+function hasEnough(x) {
+  return x.euTons > 0 && x.cp > 0 && x.intensity > 0;
 }
 
-function calc(inputs) {
-  const coveredTco2 = inputs.euTons * inputs.intensity;
-  const grossEUR = coveredTco2 * inputs.cp;
-  const netEUR = grossEUR * (1 - inputs.exempt / 100);
-  const perTonEUR = inputs.euTons > 0 ? netEUR / inputs.euTons : 0;
+function calc(x) {
+  const coveredTco2 = x.euTons * x.intensity;
+  const grossEUR    = coveredTco2 * x.cp;
+  const netEUR      = grossEUR * (1 - x.exempt / 100);
+  const perTonEUR   = x.euTons > 0 ? netEUR / x.euTons : 0;
   return { coveredTco2, grossEUR, netEUR, perTonEUR };
 }
 
-function calcScenario(inputs, key) {
+function calcScenario(x, key) {
   const sc = SCENARIOS[key] || SCENARIOS.base;
-  const cpS = inputs.cp * sc.cpMult;
-  const intS = inputs.intensity * sc.intMult;
+  const cpS  = x.cp * sc.cpMult;
+  const intS = x.intensity * sc.intMult;
 
-  const coveredTco2 = inputs.euTons * intS;
-  const grossEUR = coveredTco2 * cpS;
-  const netEUR = grossEUR * (1 - inputs.exempt / 100);
-  const perTonEUR = inputs.euTons > 0 ? netEUR / inputs.euTons : 0;
+  const coveredTco2 = x.euTons * intS;
+  const grossEUR    = coveredTco2 * cpS;
+  const netEUR      = grossEUR * (1 - x.exempt / 100);
+  const perTonEUR   = x.euTons > 0 ? netEUR / x.euTons : 0;
 
   return { cpS, intS, coveredTco2, netEUR, perTonEUR };
 }
 
-/* ---------------- Rendering ---------------- */
+/* ===================== Rendering ===================== */
 function renderDashes(note = "Enter inputs then Apply") {
   setText(outAnnual, "—");
   setText(outPerTon, "—");
-  setText(outTco2, "—");
-  setText(outNet, "—");
-  if (outAnnualNote) setText(outAnnualNote, note);
+  setText(outTco2,   "—");
+  setText(outNet,    "—");
+  setText(outAnnualNote, note);
 
-  setText(scnCp, "—");
-  setText(scnInt, "—");
+  setText(scnCp,     "—");
+  setText(scnInt,    "—");
   setText(scnAnnual, "—");
   setText(scnPerTon, "—");
 }
 
-function renderMain(out) {
-  setText(outAnnual, fmtNumber(out.netEUR, 0));
-  setText(outPerTon, fmtNumber(out.perTonEUR, 2));
-  setText(outTco2, fmtNumber(out.coveredTco2, 0));
-  setText(outNet, fmtNumber(out.netEUR, 0));
-  if (outAnnualNote) setText(outAnnualNote, "Computed");
+function renderMain(o) {
+  setText(outAnnual, fmtNumber(o.netEUR, 0));
+  setText(outPerTon, fmtNumber(o.perTonEUR, 2));
+  setText(outTco2,   fmtNumber(o.coveredTco2, 0));
+  setText(outNet,    fmtNumber(o.netEUR, 0));
+  setText(outAnnualNote, "Computed");
 }
 
-function renderScenario(inputs) {
-  const s = calcScenario(inputs, currentScenario);
-  setText(scnCp, fmtNumber(s.cpS, 2));
-  setText(scnInt, fmtNumber(s.intS, 2));
+function renderScenario(x) {
+  const s = calcScenario(x, currentScenario);
+  setText(scnCp,     fmtNumber(s.cpS, 2));
+  setText(scnInt,    fmtNumber(s.intS, 2));
   setText(scnAnnual, fmtNumber(s.netEUR, 0));
   setText(scnPerTon, fmtNumber(s.perTonEUR, 2));
 }
@@ -235,23 +261,23 @@ function renderScenario(inputs) {
 function setScenarioUI(key) {
   currentScenario = key;
 
-  // visual toggle for buttons that have data-scn
+  // toggle buttons that have data-scn
   document.querySelectorAll("[data-scn]").forEach((b) => b.classList.remove("is-active"));
   const active = document.querySelector(`[data-scn="${key}"]`);
   if (active) active.classList.add("is-active");
 }
 
-/* ---------------- URL State ---------------- */
-function encodeState(inputs) {
+/* ===================== URL hash state ===================== */
+function encodeState(x) {
   const sp = new URLSearchParams();
-  if (inputs.totalProd) sp.set("p", String(Math.round(inputs.totalProd)));
-  if (inputs.euShare) sp.set("es", String(inputs.euShare));
-  if (inputs.euTons) sp.set("et", String(Math.round(inputs.euTons)));
-  if (inputs.intensity) sp.set("i", String(inputs.intensity));
-  if (inputs.cp) sp.set("cp", String(inputs.cp));
-  if (inputs.exempt) sp.set("ex", String(inputs.exempt));
-  if (inputs.fx) sp.set("fx", String(inputs.fx));
-  if (inputs.route) sp.set("r", inputs.route);
+  if (x.totalProd)  sp.set("p",  String(Math.round(x.totalProd)));
+  if (x.euShare)    sp.set("es", String(x.euShare));
+  if (x.euTons)     sp.set("et", String(Math.round(x.euTons)));
+  if (x.intensity)  sp.set("i",  String(x.intensity));
+  if (x.cp)         sp.set("cp", String(x.cp));
+  if (x.exempt)     sp.set("ex", String(x.exempt));
+  if (x.fx)         sp.set("fx", String(x.fx));
+  if (x.route)      sp.set("r",  x.route);
   sp.set("scn", currentScenario);
   return sp.toString();
 }
@@ -262,17 +288,17 @@ function applyStateFromUrl() {
 
   const sp = new URLSearchParams(hash);
 
-  const p = sp.get("p");
-  const es = sp.get("es");
-  const et = sp.get("et");
-  const i = sp.get("i");
-  const cp = sp.get("cp");
-  const ex = sp.get("ex");
-  const fx = sp.get("fx");
-  const r = sp.get("r");
+  const p   = sp.get("p");
+  const es  = sp.get("es");
+  const et  = sp.get("et");
+  const i   = sp.get("i");
+  const cp  = sp.get("cp");
+  const ex  = sp.get("ex");
+  const fx  = sp.get("fx");
+  const r   = sp.get("r");
   const scn = sp.get("scn");
 
-  if (p !== null) setVal(elTotalProd, p);
+  if (p  !== null) setVal(elTotalProd, p);
   if (es !== null) setVal(elEuShare, es);
 
   if (et !== null) {
@@ -280,24 +306,24 @@ function applyStateFromUrl() {
     euTonsOverridden = true;
   }
 
-  if (i !== null) setVal(elIntensity, i);
+  if (i  !== null) setVal(elIntensity, i);
   if (cp !== null) setVal(elCp, cp);
   if (ex !== null) setVal(elExempt, ex);
   if (fx !== null) setVal(elFx, fx);
-  if (r !== null) setVal(elRoute, safeStr(r, ""));
+  if (r  !== null) setVal(elRoute, safeStr(r, ""));
 
   if (scn && SCENARIOS[scn]) setScenarioUI(scn);
 
   return true;
 }
 
-/* ---------------- Storage ---------------- */
-function saveToStorage(inputs) {
+/* ===================== Local storage ===================== */
+function saveToStorage(x) {
   try {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        ...inputs,
+        ...x,
         currentScenario,
         euTonsOverridden,
       })
@@ -311,14 +337,14 @@ function loadFromStorage() {
     if (!raw) return false;
     const obj = JSON.parse(raw);
 
-    if (obj.totalProd != null) setVal(elTotalProd, obj.totalProd);
-    if (obj.euShare != null) setVal(elEuShare, obj.euShare);
-    if (obj.euTons != null) setVal(elEuTons, obj.euTons);
-    if (obj.intensity != null) setVal(elIntensity, obj.intensity);
-    if (obj.cp != null) setVal(elCp, obj.cp);
-    if (obj.exempt != null) setVal(elExempt, obj.exempt);
-    if (obj.fx != null) setVal(elFx, obj.fx);
-    if (obj.route != null) setVal(elRoute, safeStr(obj.route, ""));
+    if (obj.totalProd != null)  setVal(elTotalProd, obj.totalProd);
+    if (obj.euShare   != null)  setVal(elEuShare, obj.euShare);
+    if (obj.euTons    != null)  setVal(elEuTons, obj.euTons);
+    if (obj.intensity != null)  setVal(elIntensity, obj.intensity);
+    if (obj.cp        != null)  setVal(elCp, obj.cp);
+    if (obj.exempt    != null)  setVal(elExempt, obj.exempt);
+    if (obj.fx        != null)  setVal(elFx, obj.fx);
+    if (obj.route     != null)  setVal(elRoute, safeStr(obj.route, ""));
 
     euTonsOverridden = !!obj.euTonsOverridden;
     if (obj.currentScenario && SCENARIOS[obj.currentScenario]) setScenarioUI(obj.currentScenario);
@@ -329,27 +355,27 @@ function loadFromStorage() {
   }
 }
 
-/* ---------------- Actions ---------------- */
+/* ===================== Actions ===================== */
 function setStatus(msg) {
-  if (statusText) setText(statusText, msg);
+  setText(statusText, msg);
 }
 
 function doApply() {
-  const inputs = readInputs();
+  const x = readInputs();
 
-  if (!hasEnough(inputs)) {
+  if (!hasEnough(x)) {
     renderDashes("Enter inputs then Apply");
     setStatus("Ready.");
-    saveToStorage(inputs);
+    saveToStorage(x);
     return;
   }
 
-  const out = calc(inputs);
-  renderMain(out);
-  renderScenario(inputs);
+  const o = calc(x);
+  renderMain(o);
+  renderScenario(x);
 
-  location.hash = encodeState(inputs);
-  saveToStorage(inputs);
+  location.hash = encodeState(x);
+  saveToStorage(x);
 
   setStatus("Updated.");
 }
@@ -367,10 +393,7 @@ function doReset() {
   euTonsOverridden = false;
   setScenarioUI("base");
 
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch (_) {}
-
+  try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
   location.hash = "";
 
   renderDashes("Enter inputs then Apply");
@@ -389,7 +412,6 @@ async function copyShareLink() {
     await navigator.clipboard.writeText(url);
     setStatus("Link copied.");
   } catch (_) {
-    // fallback
     const ta = document.createElement("textarea");
     ta.value = url;
     document.body.appendChild(ta);
@@ -401,38 +423,34 @@ async function copyShareLink() {
 }
 
 function downloadCSV() {
-  const inputs = readInputs();
-  const enough = hasEnough(inputs);
-  const out = enough ? calc(inputs) : null;
+  const x = readInputs();
+  const enough = hasEnough(x);
+  const o = enough ? calc(x) : null;
 
   const rows = [
     ["CBAM Board View", ""],
-    ["Route", inputs.route || ""],
+    ["Route", x.route || ""],
     ["Scenario", currentScenario],
     ["", ""],
-    ["Total production (t/y)", inputs.totalProd || ""],
-    ["EU share (%)", inputs.euShare || ""],
-    ["EU tons (t/y)", inputs.euTons ? Math.round(inputs.euTons) : ""],
-    ["Emissions intensity (tCO2/t)", inputs.intensity || ""],
-    ["Carbon price (€/tCO2)", inputs.cp || ""],
-    ["Exemptions / free allocation (%)", inputs.exempt || ""],
-    ["FX EUR/USD (optional)", inputs.fx || ""],
+    ["Total production (t/y)", x.totalProd || ""],
+    ["EU share (%)", x.euShare || ""],
+    ["EU tons (t/y)", x.euTons ? Math.round(x.euTons) : ""],
+    ["Emissions intensity (tCO2/t)", x.intensity || ""],
+    ["Carbon price (€/tCO2)", x.cp || ""],
+    ["Exemptions / free allocation (%)", x.exempt || ""],
+    ["FX EUR/USD (optional)", x.fx || ""],
     ["", ""],
-    ["Covered emissions (tCO2)", out ? Math.round(out.coveredTco2) : ""],
-    ["Net exposure (€/year)", out ? Math.round(out.netEUR) : ""],
-    ["CBAM cost per ton (€/t)", out ? out.perTonEUR.toFixed(2) : ""],
+    ["Covered emissions (tCO2)", o ? Math.round(o.coveredTco2) : ""],
+    ["Net exposure (€/year)", o ? Math.round(o.netEUR) : ""],
+    ["CBAM cost per ton (€/t)", o ? o.perTonEUR.toFixed(2) : ""],
   ];
 
   const csv = rows
-    .map((r) =>
-      r
-        .map((x) => {
-          const s = safeStr(x, "");
-          if (s.includes(",") || s.includes('"') || s.includes("\n")) return `"${s.replace(/"/g, '""')}"`;
-          return s;
-        })
-        .join(",")
-    )
+    .map(r => r.map(v => {
+      const s = safeStr(v, "");
+      if (s.includes(",") || s.includes('"') || s.includes("\n")) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    }).join(","))
     .join("\n");
 
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -448,16 +466,18 @@ function downloadCSV() {
   setStatus("CSV downloaded.");
 }
 
-function doPrint() {
-  window.print();
-}
+function doPrint() { window.print(); }
 
-/* ---------------- Wiring ---------------- */
+/* ===================== Wiring ===================== */
 function wireScenarioButtons() {
   document.querySelectorAll("[data-scn]").forEach((b) => {
-    b.addEventListener("click", () => {
+    b.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
       const key = b.getAttribute("data-scn");
       if (!key || !SCENARIOS[key]) return;
+
       setScenarioUI(key);
       doApply();
     });
@@ -473,15 +493,31 @@ function wireInputsOverride() {
 }
 
 function wireTopBar() {
-  if (btnToggleInputs) btnToggleInputs.addEventListener("click", toggleInputsPanel);
-  if (btnCopyLink) btnCopyLink.addEventListener("click", copyShareLink);
-  if (btnCsv) btnCsv.addEventListener("click", downloadCSV);
-  if (btnPrint) btnPrint.addEventListener("click", doPrint);
+  if (btnToggleInputs) btnToggleInputs.addEventListener("click", (e) => { e.preventDefault(); toggleInputsPanel(); });
+  if (btnCopyLink)     btnCopyLink.addEventListener("click", (e) => { e.preventDefault(); copyShareLink(); });
+  if (btnCsv)          btnCsv.addEventListener("click", (e) => { e.preventDefault(); downloadCSV(); });
+  if (btnPrint)        btnPrint.addEventListener("click", (e) => { e.preventDefault(); doPrint(); });
 }
 
 function wireApplyReset() {
-  if (btnApply) btnApply.addEventListener("click", doApply);
-  if (btnReset) btnReset.addEventListener("click", doReset);
+  // Make sure Apply/Reset are buttons (not form submit)
+  if (btnApply) {
+    btnApply.setAttribute("type", "button");
+    btnApply.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      doApply();
+    });
+  }
+
+  if (btnReset) {
+    btnReset.setAttribute("type", "button");
+    btnReset.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      doReset();
+    });
+  }
 }
 
 function wirePWAInstall() {
@@ -492,19 +528,21 @@ function wirePWAInstall() {
   });
 
   if (!btnInstall) return;
-  btnInstall.addEventListener("click", async () => {
+  btnInstall.addEventListener("click", async (e) => {
+    e.preventDefault();
     if (!deferredInstallPrompt) return;
     deferredInstallPrompt.prompt();
-    try {
-      await deferredInstallPrompt.userChoice;
-    } catch (_) {}
+    try { await deferredInstallPrompt.userChoice; } catch (_) {}
     deferredInstallPrompt = null;
     btnInstall.hidden = true;
   });
 }
 
-/* ---------------- Init ---------------- */
+/* ===================== Init ===================== */
 (function init() {
+  // Defensive: prevent <form> submit from breaking buttons
+  document.addEventListener("submit", (e) => e.preventDefault(), true);
+
   setScenarioUI("base");
 
   const loadedFromUrl = applyStateFromUrl();
@@ -516,22 +554,14 @@ function wirePWAInstall() {
   wireInputsOverride();
   wirePWAInstall();
 
+  // audio
   initClickSound();
   wireClickSound();
 
   renderDashes("Enter inputs then Apply");
   setStatus("Ready.");
 
-  // Auto-apply if enough inputs
-  const inputs = readInputs();
-  if (hasEnough(inputs)) doApply();
+  // auto-apply if enough inputs
+  const x = readInputs();
+  if (hasEnough(x)) doApply();
 })();
-window.onerror = function (msg, url, line, col, error) {
-  alert(
-    "JS ERROR:\n" +
-    msg +
-    "\nLine: " + line +
-    "\nCol: " + col +
-    "\nFile: " + url
-  );
-};
