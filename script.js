@@ -17,7 +17,7 @@ function initClickSound() {
 
   uiClickSound = new Audio("sounds/click.wav");
   uiClickSound.preload = "auto";
-  uiClickSound.volume = 0.30;
+  uiClickSound.volume = 0.75;
 
   // Unlock audio on mobile browsers (must be triggered by a user gesture)
   const unlock = () => {
