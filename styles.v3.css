@@ -483,3 +483,11 @@ a{color:inherit}
   .kpi__value, .scn__value{text-shadow:none; color:#111}
   .muted, .panel__hint, .kpi__label, .kpi__unit, .kpi__note, .scn__label, .scn__unit{color:#444}
 }
+.credits{
+  margin: 14px auto 10px;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: .3px;
+  color: #FFD400;
+  opacity: .95;
+     }
