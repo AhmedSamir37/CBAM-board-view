@@ -1,4 +1,4 @@
-/* ==========================================================
+٥/* ==========================================================
    CBAM Board View (Steel – EAF/DRI) — script.js (CLEAN v3.2)
    - Strong KPI rendering (— when not enough inputs)
    - Scenarios: Base / Conservative / Stress
@@ -526,3 +526,12 @@ function wirePWAInstall() {
   const inputs = readInputs();
   if (hasEnough(inputs)) doApply();
 })();
+window.onerror = function (msg, url, line, col, error) {
+  alert(
+    "JS ERROR:\n" +
+    msg +
+    "\nLine: " + line +
+    "\nCol: " + col +
+    "\nFile: " + url
+  );
+};
