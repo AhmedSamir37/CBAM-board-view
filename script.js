@@ -345,6 +345,7 @@ if (statusText) setText(statusText, msg);
 }
 
 function doApply() {
+  alert("Apply clicked ✅");
 const inputs = readInputs();
 
 if (!hasEnough(inputs)) {
