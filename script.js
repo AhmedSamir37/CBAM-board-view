@@ -1,4 +1,14 @@
 /* ==========================================================
+// --- UI click sound ---
+const uiClickSound = new Audio("sounds/click.wav");
+uiClickSound.volume = 0.35;
+
+function playClick() {
+  try {
+    uiClickSound.currentTime = 0;
+    uiClickSound.play();
+  } catch (e) {}
+}
    CBAM Board View (Steel – EAF/DRI) — script.js (CLEAN v3.1)
    - No HTML/JS mismatch
    - Strong KPI rendering (— when not enough inputs)
@@ -439,3 +449,27 @@ function wirePWAInstall() {
   const inputs = readInputs();
   if (hasEnough(inputs)) doApply();
 })();
+// --- Attach click sound to buttons ---
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+
+  const text = (btn.innerText || "").toLowerCase();
+  const id = (btn.id || "").toLowerCase();
+  const cls = (btn.className || "").toLowerCase();
+
+  // Apply / Reset buttons
+  if (text.includes("apply") || text.includes("reset") || id.includes("apply") || id.includes("reset")) {
+    playClick();
+  }
+
+  // Scenario buttons (Base / Conservative / Stress)
+  if (text.includes("base") || text.includes("conservative") || text.includes("stress")) {
+    playClick();
+  }
+
+  // Any segmented scenario buttons
+  if (cls.includes("seg__btn")) {
+    playClick();
+  }
+});
