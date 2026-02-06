@@ -12,8 +12,40 @@
 
 /* ===================== UI click sound ===================== */
 let uiClickSound = null;
-
 function initClickSound() {
+  if (uiClickSound) return;
+
+  uiClickSound = new Audio("sounds/click.wav");
+  uiClickSound.preload = "auto";
+  uiClickSound.volume = 0.30;
+
+  // Unlock audio on mobile browsers (must be triggered by a user gesture)
+  const unlock = () => {
+    try {
+      uiClickSound.muted = true;
+      uiClickSound.play().then(() => {
+        uiClickSound.pause();
+        uiClickSound.currentTime = 0;
+        uiClickSound.muted = false;
+      }).catch(() => {
+        uiClickSound.muted = false;
+      });
+    } catch (e) {}
+  };
+
+  document.addEventListener("pointerdown", unlock, { once: true, passive: true });
+  document.addEventListener("touchstart", unlock, { once: true, passive: true });
+  document.addEventListener("keydown", unlock, { once: true });
+}
+
+function playClick() {
+  try {
+    if (!uiClickSound) initClickSound();
+    uiClickSound.currentTime = 0;
+    uiClickSound.play();
+  } catch (e) {}
+}
+
   if (uiClickSound) return;
 
   uiClickSound = new Audio("sounds/click.wav");
