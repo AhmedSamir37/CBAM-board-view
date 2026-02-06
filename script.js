@@ -537,3 +537,4 @@ setStatus("Ready.");
 const inputs = readInputs();
 if (hasEnough(inputs)) doApply();
 })();
+alert("script.js loaded");
