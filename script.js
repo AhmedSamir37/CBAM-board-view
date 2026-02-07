@@ -1,4 +1,4 @@
-"use strict";
+٦"use strict";
 
 /* =======================
    CBAM Board View — script.js (REBUILD v1)
@@ -373,7 +373,7 @@ function wire() {
   if (el.btnReset) el.btnReset.addEventListener("click", doReset);
 if (el.btnGuide) {
   el.btnGuide.addEventListener("click", () => {
-    window.open("./docs/user-guide.html", "_blank");
+    window.location.href = "./docs/user-guide.html";
   });
 }
   // scenarios
