@@ -1,9 +1,14 @@
-٦"use strict";
+"use strict";
 
-/* =======================
-   CBAM Board View — script.js (REBUILD v1)
-   Works with your provided index.html IDs
-   ======================= */
+/**
+ * CBAM Board View — script.js (Rebuild clean)
+ * Matches provided index.html IDs:
+ * Inputs: totalProd, euShare, euTons, intensity, cp, exempt, eurusd, route
+ * Buttons: btnToggleInputs, btnCopyLink, btnCsv, btnPrint, btnInstall, btnApply, btnReset, btnGuide (optional)
+ * Panels: inputsPanel, statusText
+ * KPIs: kpiAnnual, kpiPerTon, kpiTco2, kpiNet, kpiAnnualNote
+ * Scenarios: buttons [data-scn], outputs scnCp, scnInt, scnAnnual, scnPerTon
+ */
 
 const $ = (id) => document.getElementById(id);
 
@@ -18,52 +23,146 @@ const el = {
   eurusd: $("eurusd"),
   route: $("route"),
 
-  // buttons
+  // top buttons
   btnToggleInputs: $("btnToggleInputs"),
   btnCopyLink: $("btnCopyLink"),
   btnCsv: $("btnCsv"),
   btnPrint: $("btnPrint"),
   btnInstall: $("btnInstall"),
+  btnGuide: $("btnGuide"), // optional
+
+  // panel buttons
   btnApply: $("btnApply"),
   btnReset: $("btnReset"),
-  btnGuide: $("btnGuide"),
 
   // panels/status
   inputsPanel: $("inputsPanel"),
   statusText: $("statusText"),
+
+  // KPIs
+  kpiAnnual: $("kpiAnnual"),
+  kpiPerTon: $("kpiPerTon"),
+  kpiTco2: $("kpiTco2"),
+  kpiNet: $("kpiNet"),
+  kpiAnnualNote: $("kpiAnnualNote"),
+
+  // scenario outputs
+  scnCp: $("scnCp"),
+  scnInt: $("scnInt"),
+  scnAnnual: $("scnAnnual"),
+  scnPerTon: $("scnPerTon"),
 };
 
-const STORAGE_KEY = "cbam_board_view_rebuild_v1";
+const STORAGE_KEY = "cbam_board_view_v31";
+let currentScenario = "base";
+let euTonsOverridden = false;
 
+// Scenarios are multipliers applied to Base inputs
 const SCENARIOS = {
   base: { cpMult: 1.0, intMult: 1.0 },
   conservative: { cpMult: 0.85, intMult: 0.92 },
   stress: { cpMult: 1.25, intMult: 1.15 },
 };
 
-let currentScenario = "base";
-let euTonsOverridden = false;
+function isNum(n) {
+  return Number.isFinite(n);
+}
 
 function num(v, fallback = 0) {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
+
 function clamp(n, min, max) {
-  return Math.min(max, Math.max(min, n));
+  n = num(n, min);
+  return Math.min(Math.max(n, min), max);
 }
-function fmt(n, d = 0) {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return "—";
-  return x.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+
+function fmtNumber(n, decimals = 0) {
+  if (!isNum(n)) return "—";
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
 }
-function setText(node, txt) {
-  if (node) node.textContent = txt;
-}
-function setVal(node, v) {
-  if (node) node.value = v;
-}
+
 function setStatus(msg) {
-  setText(el.statusText, msg);
+  if (el.statusText) el.statusText.textContent = msg;
+}
+
+function setText(node, text) {
+  if (node) node.textContent = text;
+}
+
+function getInputsRaw() {
+  const totalProd = clamp(num(el.totalProd?.value), 0, 1e12);
+  const euShare = clamp(num(el.euShare?.value), 0, 100);
+  let euTons = clamp(num(el.euTons?.value), 0, 1e12);
+
+  const intensity = clamp(num(el.intensity?.value), 0, 1000);
+  const cp = clamp(num(el.cp?.value), 0, 1e6);
+  const exempt = clamp(num(el.exempt?.value), 0, 100);
+  const eurusd = clamp(num(el.eurusd?.value), 0, 1000);
+
+  const route = String(el.route?.value || "").trim();
+
+  // If EU tons not overridden, auto-calc
+  const autoEuTons = totalProd * (euShare / 100);
+  if (!euTonsOverridden) euTons = autoEuTons;
+
+  return {
+    totalProd,
+    euShare,
+    euTons,
+    intensity,
+    cp,
+    exempt,
+    eurusd,
+    route,
+    // helpful
+    autoEuTons,
+  };
+}
+
+function readInputsAndSoftFill() {
+  const i = getInputsRaw();
+
+  // Soft-fill EU tons field only when not overridden
+  if (el.euTons && !euTonsOverridden) {
+    // show a rounded value but keep numeric
+    el.euTons.value = i.autoEuTons ? String(Math.round(i.autoEuTons)) : "";
+  }
+
+  return i;
+}
+
+function hasEnough(i) {
+  // Minimum requirements to compute:
+  // need EU tons, intensity, carbon price
+  return i.euTons > 0 && i.intensity > 0 && i.cp >= 0;
+}
+
+function calcKPIs(i) {
+  const coveredTco2 = i.euTons * i.intensity; // tCO2
+  const grossAnnual = coveredTco2 * i.cp; // €/year
+  const netAnnual = grossAnnual * (1 - i.exempt / 100);
+  const perTon = i.euTons > 0 ? netAnnual / i.euTons : 0;
+
+  return {
+    coveredTco2,
+    grossAnnual,
+    netAnnual,
+    perTon,
+  };
+}
+
+function renderKPIs(k) {
+  setText(el.kpiAnnual, fmtNumber(k.grossAnnual, 0));
+  setText(el.kpiPerTon, fmtNumber(k.perTon, 2));
+  setText(el.kpiTco2, fmtNumber(k.coveredTco2, 0));
+  setText(el.kpiNet, fmtNumber(k.netAnnual, 0));
+
+  if (el.kpiAnnualNote) el.kpiAnnualNote.textContent = "Gross before exemptions";
 }
 
 function renderDashes(note = "Enter inputs then Apply") {
@@ -71,7 +170,7 @@ function renderDashes(note = "Enter inputs then Apply") {
   setText(el.kpiPerTon, "—");
   setText(el.kpiTco2, "—");
   setText(el.kpiNet, "—");
-  setText(el.kpiAnnualNote, note);
+  if (el.kpiAnnualNote) el.kpiAnnualNote.textContent = note;
 
   setText(el.scnCp, "—");
   setText(el.scnInt, "—");
@@ -79,273 +178,276 @@ function renderDashes(note = "Enter inputs then Apply") {
   setText(el.scnPerTon, "—");
 }
 
-function readInputs() {
-  const totalProd = Math.max(0, num(el.totalProd?.value, 0));
-  const euShare = clamp(num(el.euShare?.value, 0), 0, 100);
-
-  const autoEuTons = totalProd * (euShare / 100);
-
-  let euTons = Math.max(0, num(el.euTons?.value, 0));
-  if (!euTonsOverridden) {
-    euTons = autoEuTons;
-
-    // only auto-fill when user not actively typing in EU tons
-    if (el.euTons && document.activeElement !== el.euTons) {
-      setVal(el.euTons, autoEuTons > 0 ? String(Math.round(autoEuTons)) : "");
-    }
-  }
-
-  const intensity = Math.max(0, num(el.intensity?.value, 0));
-  const cp = Math.max(0, num(el.cp?.value, 0));
-  const exempt = clamp(num(el.exempt?.value, 0), 0, 100);
-
-  const eurusd = Math.max(0, num(el.eurusd?.value, 0));
-  const route = (el.route?.value || "").trim();
-
-  return { totalProd, euShare, autoEuTons, euTons, intensity, cp, exempt, eurusd, route };
+function setScenarioUI(key) {
+  currentScenario = key in SCENARIOS ? key : "base";
+  document.querySelectorAll("[data-scn]").forEach((b) => {
+    const active = b.getAttribute("data-scn") === currentScenario;
+    b.classList.toggle("is-active", active);
+    b.setAttribute("aria-selected", active ? "true" : "false");
+  });
 }
 
-function hasEnough(i) {
-  return i.euTons > 0 && i.intensity > 0 && i.cp > 0;
-}
+function renderScenario(iBase) {
+  const s = SCENARIOS[currentScenario] || SCENARIOS.base;
 
-function calc(i) {
-  const coveredTco2 = i.euTons * i.intensity;
-  const grossEUR = coveredTco2 * i.cp;
-  const netEUR = grossEUR * (1 - i.exempt / 100);
-  const perTonEUR = i.euTons > 0 ? netEUR / i.euTons : 0;
-  return { coveredTco2, grossEUR, netEUR, perTonEUR };
-}
+  const i = {
+    ...iBase,
+    cp: iBase.cp * s.cpMult,
+    intensity: iBase.intensity * s.intMult,
+  };
 
-function calcScenario(i, key) {
-  const sc = SCENARIOS[key] || SCENARIOS.base;
-  const cpS = i.cp * sc.cpMult;
-  const intS = i.intensity * sc.intMult;
+  const k = calcKPIs(i);
 
-  const coveredTco2 = i.euTons * intS;
-  const grossEUR = coveredTco2 * cpS;
-  const netEUR = grossEUR * (1 - i.exempt / 100);
-  const perTonEUR = i.euTons > 0 ? netEUR / i.euTons : 0;
-
-  return { cpS, intS, netEUR, perTonEUR };
-}
-
-function renderAll() {
-  const i = readInputs();
-
-  if (!hasEnough(i)) {
-    renderDashes("Enter inputs then Apply");
-    setStatus("Ready.");
-    saveState(i);
-    return;
-  }
-
-  const out = calc(i);
-  setText(el.kpiAnnual, fmt(out.netEUR, 0));
-  setText(el.kpiPerTon, fmt(out.perTonEUR, 2));
-  setText(el.kpiTco2, fmt(out.coveredTco2, 0));
-  setText(el.kpiNet, fmt(out.netEUR, 0));
-  setText(el.kpiAnnualNote, "Computed");
-
-  const s = calcScenario(i, currentScenario);
-  setText(el.scnCp, fmt(s.cpS, 2));
-  setText(el.scnInt, fmt(s.intS, 2));
-  setText(el.scnAnnual, fmt(s.netEUR, 0));
-  setText(el.scnPerTon, fmt(s.perTonEUR, 2));
-
-  saveState(i);
-  setStatus("Updated.");
-}
-
-function setScenario(key) {
-  if (!SCENARIOS[key]) key = "base";
-  currentScenario = key;
-
-  document.querySelectorAll("[data-scn]").forEach((b) => b.classList.remove("is-active"));
-  const active = document.querySelector(`[data-scn="${key}"]`);
-  if (active) active.classList.add("is-active");
-}
-
-function encodeHash(i) {
-  const sp = new URLSearchParams();
-  if (i.totalProd) sp.set("p", String(Math.round(i.totalProd)));
-  if (i.euShare) sp.set("es", String(i.euShare));
-  if (i.euTons) sp.set("et", String(Math.round(i.euTons)));
-  if (i.intensity) sp.set("i", String(i.intensity));
-  if (i.cp) sp.set("cp", String(i.cp));
-  if (i.exempt) sp.set("ex", String(i.exempt));
-  if (i.eurusd) sp.set("fx", String(i.eurusd));
-  if (i.route) sp.set("r", i.route);
-  sp.set("scn", currentScenario);
-  return sp.toString();
-}
-
-function applyFromHash() {
-  const hash = location.hash.startsWith("#") ? location.hash.slice(1) : "";
-  if (!hash) return false;
-
-  const sp = new URLSearchParams(hash);
-  const p = sp.get("p");
-  const es = sp.get("es");
-  const et = sp.get("et");
-  const inten = sp.get("i");
-  const cp = sp.get("cp");
-  const ex = sp.get("ex");
-  const fx = sp.get("fx");
-  const r = sp.get("r");
-  const scn = sp.get("scn");
-
-  if (p != null) setVal(el.totalProd, p);
-  if (es != null) setVal(el.euShare, es);
-
-  if (et != null) {
-    setVal(el.euTons, et);
-    euTonsOverridden = true;
-  }
-
-  if (inten != null) setVal(el.intensity, inten);
-  if (cp != null) setVal(el.cp, cp);
-  if (ex != null) setVal(el.exempt, ex);
-  if (fx != null) setVal(el.eurusd, fx);
-  if (r != null) setVal(el.route, r);
-
-  if (scn) setScenario(scn);
-
-  return true;
-}
-
-function saveState(i) {
-  try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ ...i, currentScenario, euTonsOverridden })
-    );
-  } catch (_) {}
-
-  // update shareable hash (only when Apply is used, to avoid noisy hash while typing)
-}
-
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return false;
-    const o = JSON.parse(raw);
-
-    if (o.totalProd != null) setVal(el.totalProd, o.totalProd);
-    if (o.euShare != null) setVal(el.euShare, o.euShare);
-    if (o.euTons != null) setVal(el.euTons, o.euTons);
-    if (o.intensity != null) setVal(el.intensity, o.intensity);
-    if (o.cp != null) setVal(el.cp, o.cp);
-    if (o.exempt != null) setVal(el.exempt, o.exempt);
-    if (o.eurusd != null) setVal(el.eurusd, o.eurusd);
-    if (o.route != null) setVal(el.route, o.route);
-
-    euTonsOverridden = !!o.euTonsOverridden;
-    setScenario(o.currentScenario || "base");
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
-
-function doApply() {
-  const i = readInputs();
-  location.hash = encodeHash(i);
-  renderAll();
-}
-
-function doReset() {
-  setVal(el.totalProd, "");
-  setVal(el.euShare, "");
-  setVal(el.euTons, "");
-  setVal(el.intensity, "");
-  setVal(el.cp, "");
-  setVal(el.exempt, "");
-  setVal(el.eurusd, "");
-  setVal(el.route, "");
-
-  euTonsOverridden = false;
-  setScenario("base");
-
-  try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
-  location.hash = "";
-
-  renderDashes("Enter inputs then Apply");
-  setStatus("Ready.");
+  setText(el.scnCp, fmtNumber(i.cp, 0));
+  setText(el.scnInt, fmtNumber(i.intensity, 2));
+  setText(el.scnAnnual, fmtNumber(k.netAnnual, 0));
+  setText(el.scnPerTon, fmtNumber(k.perTon, 2));
 }
 
 function toggleInputs() {
   if (!el.inputsPanel) return;
   const hidden = el.inputsPanel.getAttribute("aria-hidden") === "true";
   el.inputsPanel.setAttribute("aria-hidden", hidden ? "false" : "true");
+  setStatus(hidden ? "Inputs opened." : "Inputs hidden.");
+}
+
+function encodeState(i) {
+  // compact but readable; avoid route in URL if you want shorter
+  const state = {
+    p: i.totalProd,
+    s: i.euShare,
+    e: euTonsOverridden ? i.euTons : null, // only if overridden
+    i: i.intensity,
+    c: i.cp,
+    x: i.exempt,
+    f: i.eurusd || null,
+    r: i.route || null,
+    scn: currentScenario,
+  };
+  // remove nulls
+  Object.keys(state).forEach((k) => state[k] == null && delete state[k]);
+  const json = JSON.stringify(state);
+  // base64url
+  const b64 = btoa(unescape(encodeURIComponent(json)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+  return `#s=${b64}`;
+}
+
+function decodeStateFromHash() {
+  const h = String(location.hash || "");
+  if (!h.startsWith("#s=")) return null;
+
+  const b64 = h.slice(3).replace(/-/g, "+").replace(/_/g, "/");
+  // pad
+  const pad = b64.length % 4 ? "=".repeat(4 - (b64.length % 4)) : "";
+  try {
+    const json = decodeURIComponent(escape(atob(b64 + pad)));
+    const obj = JSON.parse(json);
+    return obj && typeof obj === "object" ? obj : null;
+  } catch {
+    return null;
+  }
+}
+
+function applyStateToUI(state) {
+  if (!state) return false;
+
+  // scenario first
+  if (state.scn) setScenarioUI(String(state.scn));
+
+  if (el.totalProd) el.totalProd.value = state.p != null ? String(state.p) : "";
+  if (el.euShare) el.euShare.value = state.s != null ? String(state.s) : "";
+
+  // EU tons override behavior
+  if (state.e != null) {
+    euTonsOverridden = true;
+    if (el.euTons) el.euTons.value = String(state.e);
+  } else {
+    euTonsOverridden = false;
+    // will soft-fill on read
+    if (el.euTons) el.euTons.value = "";
+  }
+
+  if (el.intensity) el.intensity.value = state.i != null ? String(state.i) : "";
+  if (el.cp) el.cp.value = state.c != null ? String(state.c) : "";
+  if (el.exempt) el.exempt.value = state.x != null ? String(state.x) : "";
+  if (el.eurusd) el.eurusd.value = state.f != null ? String(state.f) : "";
+  if (el.route) el.route.value = state.r != null ? String(state.r) : "";
+
+  // soft-fill EU tons if not overridden
+  readInputsAndSoftFill();
+  return true;
+}
+
+function saveToStorage(i) {
+  try {
+    const payload = {
+      inputs: {
+        totalProd: i.totalProd,
+        euShare: i.euShare,
+        euTons: i.euTons,
+        intensity: i.intensity,
+        cp: i.cp,
+        exempt: i.exempt,
+        eurusd: i.eurusd,
+        route: i.route,
+      },
+      meta: {
+        euTonsOverridden,
+        scenario: currentScenario,
+        ts: Date.now(),
+      },
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  } catch {}
+}
+
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.inputs) return false;
+
+    const { inputs, meta } = obj;
+
+    if (meta?.scenario) setScenarioUI(String(meta.scenario));
+    euTonsOverridden = !!meta?.euTonsOverridden;
+
+    if (el.totalProd) el.totalProd.value = inputs.totalProd != null ? String(inputs.totalProd) : "";
+    if (el.euShare) el.euShare.value = inputs.euShare != null ? String(inputs.euShare) : "";
+    if (el.euTons) el.euTons.value = euTonsOverridden && inputs.euTons != null ? String(inputs.euTons) : "";
+    if (el.intensity) el.intensity.value = inputs.intensity != null ? String(inputs.intensity) : "";
+    if (el.cp) el.cp.value = inputs.cp != null ? String(inputs.cp) : "";
+    if (el.exempt) el.exempt.value = inputs.exempt != null ? String(inputs.exempt) : "";
+    if (el.eurusd) el.eurusd.value = inputs.eurusd != null ? String(inputs.eurusd) : "";
+    if (el.route) el.route.value = inputs.route != null ? String(inputs.route) : "";
+
+    readInputsAndSoftFill();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function doApply() {
+  const i = readInputsAndSoftFill();
+
+  if (!hasEnough(i)) {
+    renderDashes("Enter inputs then Apply");
+    setStatus("Missing required inputs (EU tons, intensity, carbon price).");
+    saveToStorage(i);
+    return;
+  }
+
+  const k = calcKPIs(i);
+  renderKPIs(k);
+  renderScenario(i);
+
+  // persist
+  location.hash = encodeState(i);
+  saveToStorage(i);
+
+  setStatus("Updated.");
+}
+
+function doReset() {
+  // clear UI
+  if (el.totalProd) el.totalProd.value = "";
+  if (el.euShare) el.euShare.value = "";
+  if (el.euTons) el.euTons.value = "";
+  if (el.intensity) el.intensity.value = "";
+  if (el.cp) el.cp.value = "";
+  if (el.exempt) el.exempt.value = "";
+  if (el.eurusd) el.eurusd.value = "";
+  if (el.route) el.route.value = "";
+
+  euTonsOverridden = false;
+  setScenarioUI("base");
+
+  // clear storage + hash
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {}
+  history.replaceState(null, "", location.pathname + location.search);
+
+  renderDashes("Enter inputs then Apply");
+  setStatus("Ready.");
 }
 
 async function copyShareLink() {
-  const url = location.origin + location.pathname + (location.hash || "");
+  const i = readInputsAndSoftFill();
+  const url = location.origin + location.pathname + encodeState(i);
+
   try {
-    await navigator.clipboard.writeText(url);
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+    } else {
+      // fallback
+      const ta = document.createElement("textarea");
+      ta.value = url;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
     setStatus("Link copied.");
-  } catch (_) {
-    const ta = document.createElement("textarea");
-    ta.value = url;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand("copy");
-    document.body.removeChild(ta);
-    setStatus("Link copied.");
+  } catch {
+    setStatus("Copy failed (browser blocked).");
   }
 }
 
 function downloadCSV() {
-  const i = readInputs();
-  const enough = hasEnough(i);
-  const out = enough ? calc(i) : null;
+  const i = readInputsAndSoftFill();
+  const k = hasEnough(i) ? calcKPIs(i) : null;
 
-  const rows = [
-    ["CBAM Board View", ""],
-    ["Route", i.route || ""],
-    ["Scenario", currentScenario],
-    ["", ""],
-    ["Total production (t/y)", i.totalProd || ""],
-    ["EU share (%)", i.euShare || ""],
-    ["EU tons (t/y)", i.euTons ? Math.round(i.euTons) : ""],
-    ["Emissions intensity (tCO2/t)", i.intensity || ""],
-    ["Carbon price (€/tCO2)", i.cp || ""],
-    ["Exemptions (%)", i.exempt || ""],
-    ["FX EUR/USD (optional)", i.eurusd || ""],
-    ["", ""],
-    ["Covered emissions (tCO2)", out ? Math.round(out.coveredTco2) : ""],
-    ["Net exposure (€/year)", out ? Math.round(out.netEUR) : ""],
-    ["CBAM cost per ton (€/t)", out ? out.perTonEUR.toFixed(2) : ""],
-  ];
+  const rows = [];
+  rows.push(["field", "value"]);
+  rows.push(["route", i.route]);
+  rows.push(["totalProd_tpy", i.totalProd]);
+  rows.push(["euShare_pct", i.euShare]);
+  rows.push(["euTons_tpy", i.euTons]);
+  rows.push(["intensity_tco2_per_t", i.intensity]);
+  rows.push(["carbonPrice_eur_per_tco2", i.cp]);
+  rows.push(["exemptions_pct", i.exempt]);
+  rows.push(["fx_eur_usd_optional", i.eurusd]);
+
+  if (k) {
+    rows.push(["coveredEmissions_tco2", k.coveredTco2]);
+    rows.push(["grossExposure_eur_per_year", k.grossAnnual]);
+    rows.push(["netExposure_eur_per_year", k.netAnnual]);
+    rows.push(["netCost_eur_per_t_exported", k.perTon]);
+    if (i.eurusd > 0) {
+      rows.push(["netExposure_usd_per_year_optional", k.netAnnual * i.eurusd]);
+      rows.push(["netCost_usd_per_t_optional", k.perTon * i.eurusd]);
+    }
+  } else {
+    rows.push(["note", "Not enough inputs to compute KPIs"]);
+  }
 
   const csv = rows
-    .map((r) =>
-      r
-        .map((x) => {
-          const s = String(x ?? "");
-          if (s.includes(",") || s.includes('"') || s.includes("\n")) return `"${s.replace(/"/g, '""')}"`;
-          return s;
-        })
-        .join(",")
-    )
+    .map((r) => r.map((x) => `"${String(x ?? "").replace(/"/g, '""')}"`).join(","))
     .join("\n");
 
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const u = URL.createObjectURL(blob);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
-  a.href = u;
-  a.download = "cbam-board-view.csv";
+  a.href = URL.createObjectURL(blob);
+  a.download = `cbam_board_view_${Date.now()}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(u);
+  URL.revokeObjectURL(a.href);
 
   setStatus("CSV downloaded.");
 }
 
 function wire() {
-  // EU tons override detection
+  // detect EU tons override by user typing
   if (el.euTons) {
     el.euTons.addEventListener("input", () => {
       const v = String(el.euTons.value || "").trim();
@@ -360,43 +462,89 @@ function wire() {
 
   if (el.btnApply) el.btnApply.addEventListener("click", doApply);
   if (el.btnReset) el.btnReset.addEventListener("click", doReset);
-if (el.btnGuide) {
-  el.btnGuide.addEventListener("click", () => {
-    window.location.href = "./docs/user-guide.html";
-  });
-}
-  // scenarios
+
+  // User Guide (same tab)
+  if (el.btnGuide) {
+    el.btnGuide.addEventListener("click", () => {
+      window.location.href = "./docs/user-guide.html";
+    });
+  }
+
+  // scenario selector
   document.querySelectorAll("[data-scn]").forEach((b) => {
     b.addEventListener("click", () => {
-      const key = b.getAttribute("data-scn");
-      setScenario(key);
-      doApply();
+      const key = String(b.getAttribute("data-scn") || "base");
+      setScenarioUI(key);
+      // If already has enough inputs, refresh scenario results
+      const i = readInputsAndSoftFill();
+      if (hasEnough(i)) renderScenario(i);
+      saveToStorage(i);
+      setStatus(`Scenario: ${currentScenario}`);
     });
+  });
+
+  // soft autofill EU tons when production/share typed
+  ["input", "change"].forEach((evt) => {
+    el.totalProd?.addEventListener(evt, () => readInputsAndSoftFill());
+    el.euShare?.addEventListener(evt, () => readInputsAndSoftFill());
   });
 }
 
-(function init() {
-  const initReport = {
-    applyFound: !!el.btnApply,
-    resetFound: !!el.btnReset,
-    inputsPanelFound: !!el.inputsPanel,
-    outputsFound: !!(el.kpiAnnual && el.kpiPerTon && el.kpiTco2 && el.kpiNet),
-  };
-  console.log("[CBAM] Initialized REBUILD v1", initReport);
+function initPWAInstall() {
+  // Optional PWA install UX
+  let deferredPrompt = null;
 
-  setScenario("base");
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (el.btnInstall) el.btnInstall.hidden = false;
+  });
 
-  const loadedHash = applyFromHash();
-  if (!loadedHash) loadState();
+  if (el.btnInstall) {
+    el.btnInstall.addEventListener("click", async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      el.btnInstall.hidden = true;
+      setStatus("Install prompt shown.");
+    });
+  }
+}
 
-  wire();
-
+function init() {
+  // baseline UI
+  setScenarioUI("base");
   renderDashes("Enter inputs then Apply");
   setStatus("Ready.");
 
-  // Soft auto-fill of EU tons when prod/share typed (without applying results)
-  ["input", "change"].forEach((evt) => {
-    el.totalProd?.addEventListener(evt, () => readInputs());
-    el.euShare?.addEventListener(evt, () => readInputs());
+  // Load state priority: URL hash > localStorage
+  const state = decodeStateFromHash();
+  const loadedFromHash = applyStateToUI(state);
+
+  if (!loadedFromHash) {
+    loadFromStorage();
+  }
+
+  wire();
+  initPWAInstall();
+
+  // If loaded state is already sufficient, auto-render without waiting Apply (optional)
+  // Keep it conservative: only render if hash existed.
+  if (loadedFromHash) {
+    const i = readInputsAndSoftFill();
+    if (hasEnough(i)) {
+      const k = calcKPIs(i);
+      renderKPIs(k);
+      renderScenario(i);
+      setStatus("Loaded from share link.");
+    }
+  }
+
+  // Debug
+  console.log("[CBAM] init ok", {
+    ids: Object.fromEntries(Object.entries(el).map(([k, v]) => [k, !!v])),
   });
-})();
+}
+
+document.addEventListener("DOMContentLoaded", init);
