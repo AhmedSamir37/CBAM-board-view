@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1320" />
+  <title>CBAM Board View - User Guide</title>
+
+  <style>
+    body{
+      margin:0;
+      font-family: Arial, sans-serif;
+      background:#0b1320;
+      color:#e9eef7;
+      line-height:1.6;
+      padding:24px;
+    }
+    h1,h2{
+      color:#ffffff;
+    }
+    .card{
+      background: rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:14px;
+      padding:18px;
+      margin-bottom:16px;
+    }
+    .muted{
+      color: rgba(233,238,247,0.7);
+      font-size:14px;
+    }
+    .btn{
+      display:inline-block;
+      padding:10px 14px;
+      border-radius:12px;
+      background:#1e3a8a;
+      color:white;
+      text-decoration:none;
+      font-weight:bold;
+      margin-top:10px;
+    }
+    ul{
+      margin:8px 0 0 18px;
+    }
+    hr{
+      border:none;
+      border-top:1px solid rgba(255,255,255,0.1);
+      margin:18px 0;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>CBAM Board View (Steel - EAF/DRI)</h1>
+  <p class="muted">
+    Decision-grade CBAM exposure calculator for steel exports to the EU.
+  </p>
+
+  <div class="card">
+    <h2>1) What is this app?</h2>
+    <p>
+      CBAM Board View is a lightweight dashboard designed to estimate the potential CBAM cost exposure
+      for steel exports to the European Union.
+    </p>
+    <p>
+      It is intentionally simplified for board-level stress-testing and decision support.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>2) Inputs (User enters)</h2>
+    <ul>
+      <li><b>Total production (t/y):</b> Total annual steel production.</li>
+      <li><b>EU share (%):</b> Percentage of production exported to EU.</li>
+      <li><b>EU tons (t/y):</b> Auto-calculated (production × EU share), but can be overridden manually.</li>
+      <li><b>Emissions intensity (tCO₂/t exported):</b> Carbon intensity of exported steel.</li>
+      <li><b>Carbon price (€/tCO₂):</b> ETS/CBAM carbon price assumption.</li>
+      <li><b>Exemptions / free allocation (%):</b> Any percentage of emissions not charged.</li>
+      <li><b>FX EUR/USD (optional):</b> Used only in CSV display.</li>
+      <li><b>Route label:</b> Text label for the scenario (EAF / DRI+EAF / Mixed).</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>3) Outputs (App results)</h2>
+    <ul>
+      <li><b>Annual CBAM exposure (€/year)</b></li>
+      <li><b>CBAM cost per ton exported (€/t)</b></li>
+      <li><b>Covered emissions (tCO₂)</b></li>
+      <li><b>Net exposure after exemptions (€/year)</b></li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>4) Scenarios</h2>
+    <p>
+      The app provides three scenario modes:
+    </p>
+    <ul>
+      <li><b>Base:</b> Current input values.</li>
+      <li><b>Conservative:</b> Lower carbon price / better performance assumptions.</li>
+      <li><b>Stress:</b> Higher carbon price / worse performance assumptions.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>5) Actions</h2>
+    <ul>
+      <li><b>Edit inputs:</b> Show/hide the inputs panel.</li>
+      <li><b>Apply:</b> Calculate KPIs and scenarios.</li>
+      <li><b>Reset:</b> Clears all inputs and results.</li>
+      <li><b>Copy share link:</b> Copies a URL containing saved scenario data.</li>
+      <li><b>Download CSV:</b> Export inputs and KPIs into a CSV file.</li>
+      <li><b>Print / Save PDF:</b> Uses browser printing to save the report as PDF.</li>
+    </ul>
+  </div>
+
+  <hr>
+
+  <div class="card">
+    <h2>📌 Arabic Summary (ملخص بالعربي)</h2>
+    <p>
+      هذا التطبيق يقوم بحساب تكلفة CBAM المتوقعة لصادرات الصلب إلى الاتحاد الأوروبي
+      بناءً على الإنتاج السنوي، نسبة التصدير، شدة الانبعاثات، وسعر الكربون.
+    </p>
+    <p>
+      النتائج تظهر تكلفة CBAM السنوية، التكلفة لكل طن، إجمالي الانبعاثات المغطاة،
+      والتكلفة بعد الخصومات/الإعفاءات.
+    </p>
+  </div>
+
+  <a class="btn" href="../index.html">⬅ Back to App</a>
+
+</body>
+</html>
