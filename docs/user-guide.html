@@ -4,133 +4,430 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0b1320" />
-  <title>CBAM Board View - User Guide</title>
+  <meta name="description" content="CBAM Board View - User Guide (Steel EAF/DRI). Official guide for board-level stress-testing." />
+  <title>CBAM Board View — User Guide</title>
 
   <style>
+    :root{
+      --bg:#0b1320;
+      --panel:rgba(255,255,255,.04);
+      --panel2:rgba(255,255,255,.055);
+      --border:rgba(255,255,255,.08);
+      --text:#e9eef7;
+      --muted:rgba(233,238,247,.70);
+      --muted2:rgba(233,238,247,.55);
+      --accent:#1e3a8a;
+      --accent2:#2563eb;
+      --chip:rgba(37,99,235,.14);
+      --warn:rgba(251,191,36,.16);
+      --ok:rgba(34,197,94,.14);
+      --bad:rgba(239,68,68,.14);
+      --shadow: 0 18px 60px rgba(0,0,0,.35);
+      --radius:18px;
+    }
+
+    *{box-sizing:border-box}
     body{
       margin:0;
-      font-family: Arial, sans-serif;
-      background:#0b1320;
-      color:#e9eef7;
-      line-height:1.6;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background:
+        radial-gradient(1200px 700px at 20% -10%, rgba(37,99,235,.18), transparent 55%),
+        radial-gradient(900px 600px at 90% 10%, rgba(30,58,138,.20), transparent 55%),
+        linear-gradient(180deg, #07101d 0%, var(--bg) 40%, #07101d 100%);
+      color:var(--text);
+      line-height:1.65;
       padding:24px;
     }
-    h1,h2{
-      color:#ffffff;
+
+    .wrap{max-width:980px; margin:0 auto;}
+    .hero{
+      background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.03));
+      border:1px solid var(--border);
+      border-radius:24px;
+      padding:26px 22px;
+      box-shadow:var(--shadow);
+      position:relative;
+      overflow:hidden;
     }
-    .card{
-      background: rgba(255,255,255,0.04);
-      border:1px solid rgba(255,255,255,0.08);
+    .hero:after{
+      content:"";
+      position:absolute; inset:-40% -20% auto auto;
+      width:420px; height:420px;
+      background:radial-gradient(circle at 30% 30%, rgba(37,99,235,.22), transparent 60%);
+      transform:rotate(12deg);
+      pointer-events:none;
+    }
+
+    .title{font-size:32px; font-weight:800; letter-spacing:.2px; margin:0 0 6px;}
+    .subtitle{margin:0; color:var(--muted); font-size:15px;}
+    .toolbar{display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; position:relative; z-index:1;}
+    .btn{
+      display:inline-flex; align-items:center; gap:10px;
+      padding:10px 14px;
       border-radius:14px;
-      padding:18px;
-      margin-bottom:16px;
-    }
-    .muted{
-      color: rgba(233,238,247,0.7);
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.04);
+      color:var(--text);
+      text-decoration:none;
+      font-weight:700;
       font-size:14px;
     }
-    .btn{
-      display:inline-block;
-      padding:10px 14px;
-      border-radius:12px;
-      background:#1e3a8a;
-      color:white;
-      text-decoration:none;
-      font-weight:bold;
-      margin-top:10px;
+    .btn:hover{border-color:rgba(255,255,255,.14); background:rgba(255,255,255,.06);}
+    .btn.primary{background:rgba(37,99,235,.14); border-color:rgba(37,99,235,.35);}
+    .btn.primary:hover{background:rgba(37,99,235,.18); border-color:rgba(37,99,235,.5);}
+
+    .grid{display:grid; grid-template-columns:1fr; gap:16px; margin-top:18px;}
+    @media (min-width: 860px){
+      .grid{grid-template-columns:1fr 1fr;}
     }
-    ul{
-      margin:8px 0 0 18px;
+
+    .card{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:18px;
+      box-shadow: 0 10px 36px rgba(0,0,0,.22);
     }
-    hr{
-      border:none;
-      border-top:1px solid rgba(255,255,255,0.1);
-      margin:18px 0;
+    .card h2{
+      margin:0 0 10px;
+      font-size:20px;
+      font-weight:800;
     }
+    .card p{margin:0 0 10px; color:var(--muted);}
+    .card p strong{color:var(--text);}
+    .muted{color:var(--muted);}
+    .tiny{color:var(--muted2); font-size:13px;}
+
+    .klist{margin:10px 0 0; padding-left:18px;}
+    .klist li{margin:8px 0; color:var(--muted);}
+    .klist strong{color:var(--text);}
+
+    .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;}
+    .chip{
+      background:var(--chip);
+      border:1px solid rgba(37,99,235,.35);
+      color:var(--text);
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:800;
+      letter-spacing:.2px;
+    }
+    .chip.ok{background:var(--ok); border-color:rgba(34,197,94,.35);}
+    .chip.warn{background:var(--warn); border-color:rgba(251,191,36,.35);}
+    .chip.bad{background:var(--bad); border-color:rgba(239,68,68,.35);}
+
+    .table{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0;
+      overflow:hidden;
+      border-radius:14px;
+      border:1px solid var(--border);
+      margin-top:12px;
+    }
+    .table th, .table td{
+      text-align:left;
+      padding:12px 12px;
+      vertical-align:top;
+      border-bottom:1px solid rgba(255,255,255,.06);
+    }
+    .table th{
+      font-size:12px;
+      color:var(--muted2);
+      letter-spacing:.3px;
+      text-transform:uppercase;
+      background:rgba(255,255,255,.03);
+    }
+    .table td{color:var(--muted); font-size:14px;}
+    .table tr:last-child td{border-bottom:none;}
+
+    .callout{
+      border-radius:16px;
+      border:1px solid rgba(255,255,255,.10);
+      background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.03));
+      padding:16px;
+      margin-top:16px;
+    }
+    .callout h3{margin:0 0 8px; font-size:16px; font-weight:900;}
+    .callout ul{margin:8px 0 0; padding-left:18px;}
+    .callout li{margin:8px 0; color:var(--muted);}
+
+    .footer{
+      margin-top:18px;
+      text-align:center;
+      color:var(--muted2);
+      font-size:12px;
+    }
+    code{
+      background:rgba(255,255,255,.05);
+      border:1px solid rgba(255,255,255,.08);
+      padding:2px 6px;
+      border-radius:10px;
+      color:var(--text);
+      font-weight:700;
+      font-size:12px;
+    }
+    .anchor{scroll-margin-top:18px;}
   </style>
 </head>
 
 <body>
+  <div class="wrap">
 
-  <h1>CBAM Board View (Steel - EAF/DRI)</h1>
-  <p class="muted">
-    Decision-grade CBAM exposure calculator for steel exports to the EU.
-  </p>
+    <section class="hero">
+      <h1 class="title">CBAM Board View (Steel — EAF/DRI)</h1>
+      <p class="subtitle">Official User Guide — board-level stress-testing for EU CBAM exposure. Lightweight, shareable, offline-ready.</p>
 
-  <div class="card">
-    <h2>1) What is this app?</h2>
-    <p>
-      CBAM Board View is a lightweight dashboard designed to estimate the potential CBAM cost exposure
-      for steel exports to the European Union.
-    </p>
-    <p>
-      It is intentionally simplified for board-level stress-testing and decision support.
-    </p>
+      <div class="toolbar">
+        <a class="btn primary" href="../index.html">Back to App</a>
+        <a class="btn" href="#how">How to use</a>
+        <a class="btn" href="#inputs">Inputs</a>
+        <a class="btn" href="#outputs">Outputs</a>
+        <a class="btn" href="#scenarios">Scenarios</a>
+        <a class="btn" href="#assumptions">Assumptions</a>
+      </div>
+
+      <div class="chips">
+        <span class="chip ok">Fast</span>
+        <span class="chip">Decision-grade</span>
+        <span class="chip warn">Not MRV</span>
+        <span class="chip">Shareable links</span>
+        <span class="chip">Offline-ready</span>
+      </div>
+    </section>
+
+    <div class="grid">
+
+      <section class="card anchor" id="what">
+        <h2>1) What is this app?</h2>
+        <p>
+          <strong>CBAM Board View</strong> is a lightweight dashboard designed to estimate potential
+          <strong>CBAM cost exposure</strong> for steel exports to the European Union.
+        </p>
+        <p>
+          It is intentionally simplified for <strong>board-level stress-testing</strong>, scenario planning,
+          and quick decision support — not for formal regulatory reporting.
+        </p>
+
+        <div class="callout">
+          <h3>When to use it</h3>
+          <ul>
+            <li>Board discussion: “How big is our EU CBAM exposure this year?”</li>
+            <li>Commercial planning: “What €/t penalty could hit our export margins?”</li>
+            <li>Strategy: “Which lever reduces exposure fastest: intensity, EU share, exemptions, or carbon price?”</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="card anchor" id="how">
+        <h2>2) How to use (step-by-step)</h2>
+        <ol class="klist" style="padding-left:18px;">
+          <li><strong>Open Inputs</strong> via <code>Edit inputs</code>.</li>
+          <li>Enter values (or keep defaults).</li>
+          <li>Press <strong>Apply</strong> to compute KPIs and scenarios.</li>
+          <li>Use <code>Copy share link</code> to capture the exact state (inputs + scenario) in the URL.</li>
+          <li>Use <strong>Reset</strong> to clear inputs and return to a clean state.</li>
+          <li>Use <code>Download CSV</code> to export a structured snapshot (for spreadsheet work).</li>
+          <li>Use <code>Print / Save PDF</code> to produce a board-ready one-pager.</li>
+        </ol>
+
+        <div class="callout">
+          <h3>Board tip</h3>
+          <ul>
+            <li>Use <strong>Base</strong> for “current state”, then click <strong>Stress</strong> to show downside risk in 5 seconds.</li>
+            <li>Show the board <strong>€/t exported</strong> first — it maps directly to margin impact.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="card anchor" id="inputs">
+        <h2>3) Inputs (user enters)</h2>
+
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Meaning</th>
+              <th>Example</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Total production (t/y)</strong></td>
+              <td>Total annual steel production (all markets).</td>
+              <td>4,500,000</td>
+            </tr>
+            <tr>
+              <td><strong>EU share (%)</strong></td>
+              <td>Share of total production exported to the EU.</td>
+              <td>18</td>
+            </tr>
+            <tr>
+              <td><strong>EU tons (t/y)</strong></td>
+              <td>Auto-calculated as production × EU share, but can be overridden manually.</td>
+              <td>810,000</td>
+            </tr>
+            <tr>
+              <td><strong>Emissions intensity (tCO₂/t exported)</strong></td>
+              <td>Carbon intensity of exported steel (simplified single value).</td>
+              <td>2.10</td>
+            </tr>
+            <tr>
+              <td><strong>Carbon price (€/tCO₂)</strong></td>
+              <td>ETS/CBAM carbon price assumption used for stress-testing.</td>
+              <td>80</td>
+            </tr>
+            <tr>
+              <td><strong>Exemptions / free allocation (%)</strong></td>
+              <td>Any percentage of emissions assumed not charged (simplified lever).</td>
+              <td>0</td>
+            </tr>
+            <tr>
+              <td><strong>FX EUR/USD (optional)</strong></td>
+              <td>Used only in CSV display (core KPIs remain in EUR).</td>
+              <td>1.10</td>
+            </tr>
+            <tr>
+              <td><strong>Route label (text)</strong></td>
+              <td>Label for the scenario route (EAF, DRI+EAF, Mixed).</td>
+              <td>EAF</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p class="tiny" style="margin-top:10px;">
+          Note: If you manually type <strong>EU tons</strong>, the app treats it as an override (it will not auto-update from production/share).
+        </p>
+      </section>
+
+      <section class="card anchor" id="outputs">
+        <h2>4) Outputs (app results)</h2>
+
+        <table class="table">
+          <thead>
+            <tr>
+              <th>KPI</th>
+              <th>What it tells the board</th>
+              <th>Simple calculation</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Covered emissions (tCO₂)</strong></td>
+              <td>How many tons of CO₂ are “priced” under the simplified model.</td>
+              <td><code>EU tons × intensity</code></td>
+            </tr>
+            <tr>
+              <td><strong>Annual CBAM exposure (€/year)</strong></td>
+              <td>Gross annual exposure before exemptions/free allocation.</td>
+              <td><code>tCO₂ × carbon price</code></td>
+            </tr>
+            <tr>
+              <td><strong>Net exposure after exemptions (€/year)</strong></td>
+              <td>Exposure after applying the simplified exemption lever.</td>
+              <td><code>Gross × (1 − exemptions)</code></td>
+            </tr>
+            <tr>
+              <td><strong>CBAM cost per ton exported (€/t)</strong></td>
+              <td>Margin impact per exported ton — most actionable KPI.</td>
+              <td><code>Net / EU tons</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout">
+          <h3>How to interpret results</h3>
+          <ul>
+            <li><strong>€/t exported</strong> → maps directly to commercial margin and pricing power.</li>
+            <li><strong>€/year</strong> → board-level exposure and financing/strategy relevance.</li>
+            <li><strong>tCO₂</strong> → operational decarbonization signal (intensity matters).</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="card anchor" id="scenarios">
+        <h2>5) Scenarios</h2>
+        <p>The app provides three scenario modes:</p>
+
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Mode</th>
+              <th>Purpose</th>
+              <th>Typical interpretation</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Base</strong></td>
+              <td>Current input values.</td>
+              <td>“Our best estimate / current state.”</td>
+            </tr>
+            <tr>
+              <td><strong>Conservative</strong></td>
+              <td>Lower carbon price and/or improved intensity assumptions (lighter exposure).</td>
+              <td>“What if conditions are favorable or we improve performance.”</td>
+            </tr>
+            <tr>
+              <td><strong>Stress</strong></td>
+              <td>Higher carbon price and/or worse intensity assumptions (heavier exposure).</td>
+              <td>“Downside case / risk boundary.”</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p class="tiny" style="margin-top:10px;">
+          Scenario multipliers are configurable in the app’s <code>script.js</code> (SCENARIOS object).
+        </p>
+      </section>
+
+      <section class="card anchor" id="assumptions">
+        <h2>6) Assumptions & limitations (read before using externally)</h2>
+        <ul class="klist">
+          <li>This tool is a <strong>simplified decision model</strong> for stress-testing, not a compliance calculator.</li>
+          <li>Real CBAM reporting requires verified <strong>system boundaries</strong>, product method rules, MRV, and EU reporting formats.</li>
+          <li>Intensity is treated as one value, while real systems may differ by product SKU, route, and site energy mix.</li>
+          <li>Exemptions/free allocation are simplified as a single percentage lever.</li>
+        </ul>
+
+        <div class="callout">
+          <h3>Recommended language when sharing</h3>
+          <ul>
+            <li><strong>“Indicative estimate for decision stress-testing.”</strong></li>
+            <li><strong>“Not a substitute for verified MRV or formal CBAM declarations.”</strong></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="card anchor" id="board">
+        <h2>7) Board-ready use (suggested flow)</h2>
+        <ol class="klist" style="padding-left:18px;">
+          <li>Show <strong>€/t exported</strong> (commercial impact).</li>
+          <li>Show <strong>€/year</strong> (strategy and cash exposure).</li>
+          <li>Switch from <strong>Base → Stress</strong> (risk boundary).</li>
+          <li>Ask: “Which lever is cheapest: reduce intensity, reduce EU share, or secure exemptions?”</li>
+          <li>Export a PDF using <code>Print / Save PDF</code> for the board pack.</li>
+        </ol>
+      </section>
+
+      <section class="card anchor" id="version">
+        <h2>8) Version & credits</h2>
+        <p class="muted">
+          <strong>CBAM Board View</strong> — User Guide<br/>
+          Designed &amp; Developed by <strong>Eng. Ahmed Samir Farag</strong>.
+        </p>
+        <p class="tiny">
+          Tip: keep this file as the “single source of truth” for documentation. If you later export a PDF, export from this HTML.
+        </p>
+      </section>
+
+    </div>
+
+    <div class="footer">
+      CBAM Board View — Official Guide · HTML is the reference documentation
+    </div>
+
   </div>
-
-  <div class="card">
-    <h2>2) Inputs (User enters)</h2>
-    <ul>
-      <li><b>Total production (t/y):</b> Total annual steel production.</li>
-      <li><b>EU share (%):</b> Percentage of production exported to EU.</li>
-      <li><b>EU tons (t/y):</b> Auto-calculated (production × EU share), but can be overridden manually.</li>
-      <li><b>Emissions intensity (tCO₂/t exported):</b> Carbon intensity of exported steel.</li>
-      <li><b>Carbon price (€/tCO₂):</b> ETS/CBAM carbon price assumption.</li>
-      <li><b>Exemptions / free allocation (%):</b> Any percentage of emissions not charged.</li>
-      <li><b>FX EUR/USD (optional):</b> Used only in CSV display.</li>
-      <li><b>Route label:</b> Text label for the scenario (EAF / DRI+EAF / Mixed).</li>
-    </ul>
-  </div>
-
-  <div class="card">
-    <h2>3) Outputs (App results)</h2>
-    <ul>
-      <li><b>Annual CBAM exposure (€/year)</b></li>
-      <li><b>CBAM cost per ton exported (€/t)</b></li>
-      <li><b>Covered emissions (tCO₂)</b></li>
-      <li><b>Net exposure after exemptions (€/year)</b></li>
-    </ul>
-  </div>
-
-  <div class="card">
-    <h2>4) Scenarios</h2>
-    <p>
-      The app provides three scenario modes:
-    </p>
-    <ul>
-      <li><b>Base:</b> Current input values.</li>
-      <li><b>Conservative:</b> Lower carbon price / better performance assumptions.</li>
-      <li><b>Stress:</b> Higher carbon price / worse performance assumptions.</li>
-    </ul>
-  </div>
-
-  <div class="card">
-    <h2>5) Actions</h2>
-    <ul>
-      <li><b>Edit inputs:</b> Show/hide the inputs panel.</li>
-      <li><b>Apply:</b> Calculate KPIs and scenarios.</li>
-      <li><b>Reset:</b> Clears all inputs and results.</li>
-      <li><b>Copy share link:</b> Copies a URL containing saved scenario data.</li>
-      <li><b>Download CSV:</b> Export inputs and KPIs into a CSV file.</li>
-      <li><b>Print / Save PDF:</b> Uses browser printing to save the report as PDF.</li>
-    </ul>
-  </div>
-
-  <hr>
-
-  <div class="card">
-    <h2>📌 Arabic Summary (ملخص بالعربي)</h2>
-    <p>
-      هذا التطبيق يقوم بحساب تكلفة CBAM المتوقعة لصادرات الصلب إلى الاتحاد الأوروبي
-      بناءً على الإنتاج السنوي، نسبة التصدير، شدة الانبعاثات، وسعر الكربون.
-    </p>
-    <p>
-      النتائج تظهر تكلفة CBAM السنوية، التكلفة لكل طن، إجمالي الانبعاثات المغطاة،
-      والتكلفة بعد الخصومات/الإعفاءات.
-    </p>
-  </div>
-
-  <a class="btn" href="../index.html">⬅ Back to App</a>
-
 </body>
 </html>
