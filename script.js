@@ -371,7 +371,11 @@ function wire() {
 
   if (el.btnApply) el.btnApply.addEventListener("click", doApply);
   if (el.btnReset) el.btnReset.addEventListener("click", doReset);
-
+if (el.btnGuide) {
+  el.btnGuide.addEventListener("click", () => {
+    window.open("./docs/user-guide.html", "_blank");
+  });
+}
   // scenarios
   document.querySelectorAll("[data-scn]").forEach((b) => {
     b.addEventListener("click", () => {
