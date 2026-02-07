@@ -26,22 +26,11 @@ const el = {
   btnInstall: $("btnInstall"),
   btnApply: $("btnApply"),
   btnReset: $("btnReset"),
+  btnGuide: $("btnGuide"),
 
   // panels/status
   inputsPanel: $("inputsPanel"),
   statusText: $("statusText"),
-
-  // outputs
-  kpiAnnual: $("kpiAnnual"),
-  kpiPerTon: $("kpiPerTon"),
-  kpiTco2: $("kpiTco2"),
-  kpiNet: $("kpiNet"),
-  kpiAnnualNote: $("kpiAnnualNote"),
-
-  scnCp: $("scnCp"),
-  scnInt: $("scnInt"),
-  scnAnnual: $("scnAnnual"),
-  scnPerTon: $("scnPerTon"),
 };
 
 const STORAGE_KEY = "cbam_board_view_rebuild_v1";
